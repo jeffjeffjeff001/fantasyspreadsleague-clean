@@ -1,0 +1,9 @@
+# dependencies
+/node_modules
+
+# next.js build outputs
+/.next
+/out
+
+# local env files
+.env*
