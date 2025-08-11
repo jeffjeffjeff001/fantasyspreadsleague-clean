@@ -1,320 +1,247 @@
 // pages/auth.js
-import { useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/router'
-import Link from '../components/LegacyLink'
 import { supabase } from '../lib/supabaseClient'
 
 export default function AuthPage() {
+  const [mode, setMode] = useState('sign-in') // 'sign-in' | 'sign-up' | 'reset'
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const router = useRouter()
 
-  // views: 'signin' | 'signup' | 'request' | 'update'
-  const [view, setView] = useState('signin')
+  // Refs (uncontrolled inputs = no re-render on every keystroke)
+  const firstRef = useRef(null)
+  const lastRef = useRef(null)
+  const userRef = useRef(null)
+  const emailRef = useRef(null)
+  const passRef = useRef(null)
+  const resetEmailRef = useRef(null)
+  const newPassRef = useRef(null)
 
-  // shared fields
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const clearMessages = () => {
+    setError('')
+    setNotice('')
+  }
 
-  // sign-up only fields
-  const [firstName, setFirst] = useState('')
-  const [lastName, setLast] = useState('')
-  const [username, setUsername] = useState('')
-
-  // password reset (update)
-  const [newPassword, setNewPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState('')
-  const [err, setErr] = useState('')
-
-  // Detect Supabase password-recovery link without subscribing to auth events
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    // Supabase sends: http(s)://.../auth#access_token=...&type=recovery
-    const hash = window.location.hash || ''
-    if (hash.includes('type=recovery')) {
-      setView('update')
-      setMsg('Enter a new password to finish resetting your account.')
-    }
-  }, [])
-
-  // ─────────── Actions ───────────
-
-  async function signIn(e) {
+  // ── SIGN UP ────────────────────────────────────────────────────────
+  const handleSignUp = async (e) => {
     e.preventDefault()
-    setLoading(true); setErr(''); setMsg('')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    setLoading(false)
-    if (error) return setErr(error.message)
+    clearMessages()
+
+    const first_name = firstRef.current?.value?.trim() || ''
+    const last_name  = lastRef.current?.value?.trim() || ''
+    const username   = userRef.current?.value?.trim() || ''
+    const email      = emailRef.current?.value?.trim() || ''
+    const password   = passRef.current?.value || ''
+
+    if (!first_name || !last_name || !username || !email || !password) {
+      setError('Please complete all fields.')
+      return
+    }
+
+    // Ensure unique username
+    const { data: existing, error: exErr } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', username)
+      .maybeSingle()
+
+    if (exErr) {
+      setError(exErr.message)
+      return
+    }
+    if (existing) {
+      setError('Username already taken.')
+      return
+    }
+
+    // Create auth user
+    const { error: signErr } = await supabase.auth.signUp(
+      { email, password },
+      { data: { first_name, last_name, username } }
+    )
+    if (signErr) {
+      setError(signErr.message)
+      return
+    }
+
+    // Mirror profile
+    const { error: profErr } = await supabase.from('profiles').insert([
+      { email, username, first_name, last_name }
+    ])
+    if (profErr) {
+      setError(profErr.message)
+      return
+    }
+
+    setNotice('Account created! Redirecting…')
     router.push('/picks')
   }
 
-  async function signUp(e) {
+  // ── SIGN IN ────────────────────────────────────────────────────────
+  const handleSignIn = async (e) => {
     e.preventDefault()
-    setLoading(true); setErr(''); setMsg('')
+    clearMessages()
 
-    // ensure username unique
-    const { data: existing, error: uErr } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('username', username.trim())
-      .maybeSingle()
+    const email    = emailRef.current?.value?.trim() || ''
+    const password = passRef.current?.value || ''
 
-    if (uErr) { setLoading(false); return setErr(uErr.message) }
-    if (existing) { setLoading(false); return setErr('Username already taken.') }
-
-    const redirectTo = typeof window !== 'undefined'
-      ? `${window.location.origin}/auth`
-      : undefined
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName.trim(),
-          last_name : lastName.trim(),
-          username  : username.trim()
-        },
-        emailRedirectTo: redirectTo
-      }
-    })
-
-    if (error) { setLoading(false); return setErr(error.message) }
-
-    // mirror into profiles
-    try {
-      await supabase.from('profiles').upsert([{
-        email,
-        username: username.trim(),
-        first_name: firstName.trim(),
-        last_name : lastName.trim()
-      }], { onConflict: 'email' })
-    } catch (e) {
-      console.error(e)
+    if (!email || !password) {
+      setError('Enter email and password.')
+      return
     }
 
-    setLoading(false)
-
-    if (!data.session) {
-      setMsg('Check your email to confirm your account, then sign in.')
-      setView('signin')
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    if (err) {
+      setError(err.message)
       return
     }
     router.push('/picks')
   }
 
-  async function requestReset(e) {
+  // ── RESET PASSWORD ────────────────────────────────────────────────
+  const handleReset = async (e) => {
     e.preventDefault()
-    setLoading(true); setErr(''); setMsg('')
-    try {
-      const redirectTo = `${window.location.origin}/auth`
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
-      setLoading(false)
-      if (error) return setErr(error.message)
-      setMsg('If that email exists, a reset link has been sent. Check your inbox.')
-      setView('signin')
-    } catch (e2) {
-      setLoading(false)
-      setErr(e2.message)
+    clearMessages()
+
+    const email = resetEmailRef.current?.value?.trim() || ''
+    const newPassword = newPassRef.current?.value || ''
+
+    if (!email || !newPassword) {
+      setError('Enter your email and a new password.')
+      return
     }
+
+    // Update password via admin client should be done server-side normally,
+    // but for MVP we use the client session if the user is logged in.
+    // If they are not, we can send a reset link:
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user || user.email?.toLowerCase() !== email.toLowerCase()) {
+      // Not logged in as that email — send a reset link instead
+      // (This emails a magic reset; user follows link to complete.)
+      const { error: linkErr } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth`,
+      })
+      if (linkErr) {
+        setError(linkErr.message)
+        return
+      }
+      setNotice('We sent you a reset email. Check your inbox.')
+      setMode('sign-in')
+      return
+    }
+
+    // Logged in as that user → update directly
+    const { error: updErr } = await supabase.auth.updateUser({ password: newPassword })
+    if (updErr) {
+      setError(updErr.message)
+      return
+    }
+    setNotice('Password updated! Please sign in.')
+    setMode('sign-in')
   }
 
-  async function updatePassword(e) {
-    e.preventDefault()
-    setLoading(true); setErr(''); setMsg('')
-    if (newPassword.length < 6) {
-      setLoading(false); return setErr('Password must be at least 6 characters.')
-    }
-    if (newPassword !== confirm) {
-      setLoading(false); return setErr('Passwords do not match.')
-    }
-    const { error } = await supabase.auth.updateUser({ password: newPassword })
-    if (error) { setLoading(false); return setErr(error.message) }
-    await supabase.auth.signOut()
-    setLoading(false)
-    setMsg('Password updated. Please sign in with your new password.')
-    setView('signin')
-    setEmail(''); setPassword(''); setNewPassword(''); setConfirm('')
-  }
-
-  // ─────────── UI bits ───────────
-
-  const Input = (props) => (
-    <input
-      {...props}
-      autoComplete={props.autoComplete || 'off'}
-      className={`w-full rounded-md border border-slate-300 px-3 py-2 bg-white text-black placeholder-slate-500 ${props.className || ''}`}
-    />
-  )
-
-  const Label = ({ children }) => (
-    <label className="block text-sm mb-1 text-white/90">{children}</label>
+  const Field = ({ label, type = 'text', inputRef, placeholder }) => (
+    <label className="block text-sm font-medium text-black/80">
+      {label}
+      <input
+        ref={inputRef}
+        type={type}
+        placeholder={placeholder}
+        className="form-input mt-1 w-full"
+      />
+    </label>
   )
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Top bar */}
-      <header className="border-b border-white/10 bg-slate-950">
-        <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Fantasy Spreads League" className="h-7 w-7 rounded-lg" />
-            <Link href="/" className="font-semibold">Fantasy Spreads League</Link>
-          </div>
-          <nav className="hidden md:flex items-center gap-6 text-sm">
-            <Link href="/picks" className="link-muted">Submit Picks</Link>
-            <Link href="/dashboard" className="link-muted">Dashboard</Link>
-            <Link href="/nfl-scores" className="link-muted">NFL Scores</Link>
-            <Link href="/profile" className="link-muted">My Profile</Link>
-            <Link href="/admin" className="link-muted">Admin</Link>
-          </nav>
-        </div>
-      </header>
+    <div className="max-w-md mx-auto p-6">
+      <div className="card p-6">
+        <h2 className="text-xl font-semibold mb-4 text-black">
+          {mode === 'sign-in' ? 'Sign In' : mode === 'sign-up' ? 'Sign Up' : 'Reset Password'}
+        </h2>
 
-      <main className="mx-auto max-w-md px-4 py-10">
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-semibold">
-              {view === 'signin' && 'Join League / Sign In'}
-              {view === 'signup' && 'Create your account'}
-              {view === 'request' && 'Reset your password'}
-              {view === 'update' && 'Choose a new password'}
-            </h1>
+        {!!error && <p className="text-red-600 mb-3">{error}</p>}
+        {!!notice && <p className="text-emerald-700 mb-3">{notice}</p>}
 
-            {['signin', 'signup'].includes(view) && (
+        {/* SIGN IN */}
+        {mode === 'sign-in' && (
+          <form onSubmit={handleSignIn} className="space-y-3">
+            <Field label="Email" type="email" inputRef={emailRef} placeholder="you@example.com" />
+            <Field label="Password" type="password" inputRef={passRef} placeholder="••••••••" />
+            <div className="flex items-center justify-between pt-2">
+              <button type="submit" className="btn-primary">Sign In</button>
               <button
                 type="button"
-                onClick={() => { setErr(''); setMsg(''); setView(view === 'signin' ? 'signup' : 'signin') }}
-                className="text-sm link-muted"
+                className="link-muted"
+                onClick={() => { clearMessages(); setMode('reset') }}
               >
-                {view === 'signin' ? 'Need an account?' : 'Have an account?'}
+                Forgot password?
               </button>
-            )}
-          </div>
+            </div>
+          </form>
+        )}
 
-          {msg && <p className="mb-3 text-emerald-300">{msg}</p>}
-          {err && <p className="mb-3 text-rose-300">{err}</p>}
+        {/* SIGN UP */}
+        {mode === 'sign-up' && (
+          <form onSubmit={handleSignUp} className="space-y-3">
+            <Field label="First Name" inputRef={firstRef} placeholder="First name" />
+            <Field label="Last Name" inputRef={lastRef} placeholder="Last name" />
+            <Field label="Username" inputRef={userRef} placeholder="Unique handle" />
+            <Field label="Email" type="email" inputRef={emailRef} placeholder="you@example.com" />
+            <Field label="Password" type="password" inputRef={passRef} placeholder="Create a password" />
+            <div className="pt-2">
+              <button type="submit" className="btn-primary">Create Account</button>
+            </div>
+          </form>
+        )}
 
-          {/* Sign In */}
-          {view === 'signin' && (
-            <form onSubmit={signIn} className="space-y-4">
-              <div>
-                <Label>Email</Label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-              </div>
-              <div>
-                <Label>Password</Label>
-                <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-              </div>
-              <div className="flex items-center justify-between">
-                <button type="submit" className="btn-primary" disabled={loading}>
-                  {loading ? 'Signing in…' : 'Sign In'}
-                </button>
-                <button
-                  type="button"
-                  className="text-sm link-muted"
-                  onClick={() => { setErr(''); setMsg(''); setView('request') }}
-                >
-                  Forgot password?
-                </button>
-              </div>
-            </form>
-          )}
+        {/* RESET PASSWORD */}
+        {mode === 'reset' && (
+          <form onSubmit={handleReset} className="space-y-3">
+            <Field label="Email" type="email" inputRef={resetEmailRef} placeholder="you@example.com" />
+            <Field label="New Password" type="password" inputRef={newPassRef} placeholder="New password" />
+            <div className="flex items-center gap-3 pt-2">
+              <button type="submit" className="btn-primary">Reset Password</button>
+              <button
+                type="button"
+                className="link-muted"
+                onClick={() => { clearMessages(); setMode('sign-in') }}
+              >
+                Back to Sign In
+              </button>
+            </div>
+          </form>
+        )}
 
-          {/* Sign Up */}
-          {view === 'signup' && (
-            <form onSubmit={signUp} className="space-y-4">
-              <div>
-                <Label>First Name</Label>
-                <Input value={firstName} onChange={e => setFirst(e.target.value)} required />
-              </div>
-              <div>
-                <Label>Last Name</Label>
-                <Input value={lastName} onChange={e => setLast(e.target.value)} required />
-              </div>
-              <div>
-                <Label>Username</Label>
-                <Input value={username} onChange={e => setUsername(e.target.value)} required />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-              </div>
-              <div>
-                <Label>Password</Label>
-                <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-              </div>
-              <div className="flex items-center justify-between">
-                <button type="submit" className="btn-primary" disabled={loading}>
-                  {loading ? 'Creating…' : 'Sign Up'}
-                </button>
-                <button
-                  type="button"
-                  className="text-sm link-muted"
-                  onClick={() => { setErr(''); setMsg(''); setView('signin') }}
-                >
-                  Back to sign in
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* Request reset */}
-          {view === 'request' && (
-            <form onSubmit={requestReset} className="space-y-4">
-              <p className="text-sm text-slate-300">
-                Enter your email and we’ll send you a secure link to reset your password.
-              </p>
-              <div>
-                <Label>Email</Label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-              </div>
-              <div className="flex items-center gap-3">
-                <button type="submit" className="btn-primary" disabled={loading}>
-                  {loading ? 'Sending…' : 'Send reset link'}
-                </button>
-                <button
-                  type="button"
-                  className="text-sm link-muted"
-                  onClick={() => { setErr(''); setMsg(''); setView('signin') }}
-                >
-                  Back to sign in
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* Update password after email link */}
-          {view === 'update' && (
-            <form onSubmit={updatePassword} className="space-y-4">
-              <div>
-                <Label>New password</Label>
-                <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-              </div>
-              <div>
-                <Label>Confirm new password</Label>
-                <Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
-              </div>
-              <div className="flex items-center gap-3">
-                <button type="submit" className="btn-primary" disabled={loading}>
-                  {loading ? 'Updating…' : 'Update password'}
-                </button>
-                <button
-                  type="button"
-                  className="text-sm link-muted"
-                  onClick={() => { setErr(''); setMsg(''); setView('signin') }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
+        <div className="mt-4 text-sm">
+          {mode === 'sign-in' ? (
+            <span className="text-black/80">
+              Don’t have an account?{' '}
+              <button
+                type="button"
+                className="link-muted"
+                onClick={() => { clearMessages(); setMode('sign-up') }}
+              >
+                Sign Up
+              </button>
+            </span>
+          ) : mode === 'sign-up' ? (
+            <span className="text-black/80">
+              Already have one?{' '}
+              <button
+                type="button"
+                className="link-muted"
+                onClick={() => { clearMessages(); setMode('sign-in') }}
+              >
+                Sign In
+              </button>
+            </span>
+          ) : null}
         </div>
-      </main>
-
-      <footer className="mx-auto max-w-6xl px-4 py-10 text-center text-sm text-slate-300">
-        © {new Date().getFullYear()} Football Junkie
-      </footer>
+      </div>
     </div>
   )
 }
