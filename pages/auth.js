@@ -27,18 +27,18 @@ export default function AuthPage() {
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
 
-  // When user clicks the Supabase email link, we’ll get PASSWORD_RECOVERY
+  // Detect Supabase password-recovery link without subscribing to auth events
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setView('update')
-        setMsg('Enter a new password to finish resetting your account.')
-      }
-    })
-    return () => sub.subscription?.unsubscribe()
+    if (typeof window === 'undefined') return
+    // Supabase sends: http(s)://.../auth#access_token=...&type=recovery
+    const hash = window.location.hash || ''
+    if (hash.includes('type=recovery')) {
+      setView('update')
+      setMsg('Enter a new password to finish resetting your account.')
+    }
   }, [])
 
-  // ───────────────────────── Actions ─────────────────────────
+  // ─────────── Actions ───────────
 
   async function signIn(e) {
     e.preventDefault()
@@ -53,7 +53,7 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true); setErr(''); setMsg('')
 
-    // 1) ensure username unique
+    // ensure username unique
     const { data: existing, error: uErr } = await supabase
       .from('profiles')
       .select('username')
@@ -63,7 +63,6 @@ export default function AuthPage() {
     if (uErr) { setLoading(false); return setErr(uErr.message) }
     if (existing) { setLoading(false); return setErr('Username already taken.') }
 
-    // 2) create user in Supabase Auth (v2 signature)
     const redirectTo = typeof window !== 'undefined'
       ? `${window.location.origin}/auth`
       : undefined
@@ -83,7 +82,7 @@ export default function AuthPage() {
 
     if (error) { setLoading(false); return setErr(error.message) }
 
-    // 3) mirror into profiles table
+    // mirror into profiles
     try {
       await supabase.from('profiles').upsert([{
         email,
@@ -92,20 +91,16 @@ export default function AuthPage() {
         last_name : lastName.trim()
       }], { onConflict: 'email' })
     } catch (e) {
-      // don't block sign-up if profile write fails
       console.error(e)
     }
 
     setLoading(false)
 
-    // If email confirmation is ON, there may be no session yet
     if (!data.session) {
       setMsg('Check your email to confirm your account, then sign in.')
       setView('signin')
       return
     }
-
-    // else, take them in
     router.push('/picks')
   }
 
@@ -143,11 +138,12 @@ export default function AuthPage() {
     setEmail(''); setPassword(''); setNewPassword(''); setConfirm('')
   }
 
-  // ───────────────────────── UI ─────────────────────────
+  // ─────────── UI bits ───────────
 
   const Input = (props) => (
     <input
       {...props}
+      autoComplete={props.autoComplete || 'off'}
       className={`w-full rounded-md border border-slate-300 px-3 py-2 bg-white text-black placeholder-slate-500 ${props.className || ''}`}
     />
   )
@@ -187,6 +183,7 @@ export default function AuthPage() {
 
             {['signin', 'signup'].includes(view) && (
               <button
+                type="button"
                 onClick={() => { setErr(''); setMsg(''); setView(view === 'signin' ? 'signup' : 'signin') }}
                 className="text-sm link-muted"
               >
@@ -203,11 +200,11 @@ export default function AuthPage() {
             <form onSubmit={signIn} className="space-y-4">
               <div>
                 <Label>Email</Label>
-                <Input type="email" required value={email} onChange={e => setEmail(e.target.value)} />
+                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
               </div>
               <div>
                 <Label>Password</Label>
-                <Input type="password" required value={password} onChange={e => setPassword(e.target.value)} />
+                <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
               </div>
               <div className="flex items-center justify-between">
                 <button type="submit" className="btn-primary" disabled={loading}>
@@ -270,7 +267,7 @@ export default function AuthPage() {
               </p>
               <div>
                 <Label>Email</Label>
-                <Input type="email" required value={email} onChange={e => setEmail(e.target.value)} />
+                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
               </div>
               <div className="flex items-center gap-3">
                 <button type="submit" className="btn-primary" disabled={loading}>
@@ -292,11 +289,11 @@ export default function AuthPage() {
             <form onSubmit={updatePassword} className="space-y-4">
               <div>
                 <Label>New password</Label>
-                <Input type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
               </div>
               <div>
                 <Label>Confirm new password</Label>
-                <Input type="password" required value={confirm} onChange={e => setConfirm(e.target.value)} />
+                <Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
               </div>
               <div className="flex items-center gap-3">
                 <button type="submit" className="btn-primary" disabled={loading}>
