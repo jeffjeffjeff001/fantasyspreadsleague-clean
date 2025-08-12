@@ -132,7 +132,7 @@ export default function UserProfile() {
           <thead>
             <tr>
               <th style={{ border:'1px solid #ccc', padding:8 }}>Game</th>
-              <th style={{ border:'1px solid #ccc', padding:8 }}>Spread</th>
+              <th style={{ border:'1px solid #ccc', padding:8 }}>Home Team Spread</th>
               <th style={{ border:'1px solid #ccc', padding:8 }}>Your Pick</th>
               <th style={{ border:'1px solid #ccc', padding:8 }}>Lock?</th>
             </tr>
