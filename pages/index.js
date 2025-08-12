@@ -14,7 +14,10 @@ export default function AuthPage() {
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
 
-  const clearAlerts = () => { setMessage(null); setError(null) }
+  const clearAlerts = () => {
+    setMessage(null)
+    setError(null)
+  }
 
   const onSignIn = async (e) => {
     e.preventDefault()
@@ -24,7 +27,7 @@ export default function AuthPage() {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
       setMessage('Signed in! Redirecting…')
-      router.replace('/') // change if you have a dashboard route
+      router.replace('/') // change to your dashboard route if needed
     } catch (err) {
       setError(err.message)
     } finally {
@@ -42,9 +45,8 @@ export default function AuthPage() {
         password,
         options: {
           data: { first_name: firstName || null, last_name: lastName || null },
-          // (Optional) if you require email confirmation, send them back here:
           emailRedirectTo: `${window.location.origin}/reset`,
-        }
+        },
       })
       if (error) throw error
       setMessage('Check your email to confirm your account.')
@@ -82,18 +84,81 @@ export default function AuthPage() {
       {message && <p style={{ color: 'green' }}>{message}</p>}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
-      {mode !== 'reset' && (
+      {mode !== 'reset' ? (
         <form onSubmit={mode === 'sign-in' ? onSignIn : onSignUp}>
           {mode === 'sign-up' && (
             <>
               <label>First name</label>
-              <input value={firstName} onChange={(e)=>setFirstName(e.target.value)}
-                     placeholder="First name" style={{display:'block',width:'100%',marginBottom:8}} />
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="First name"
+                style={{ display: 'block', width: '100%', marginBottom: 8 }}
+              />
               <label>Last name</label>
-              <input value={lastName} onChange={(e)=>setLastName(e.target.value)}
-                     placeholder="Last name" style={{display:'block',width:'100%',marginBottom:8}} />
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Last name"
+                style={{ display: 'block', width: '100%', marginBottom: 8 }}
+              />
             </>
           )}
 
           <label>Email</label>
-          <input type="email" autoComplete="email" value={em
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            style={{ display: 'block', width: '100%', marginBottom: 8 }}
+          />
+
+          <label>Password</label>
+          <input
+            type="password"
+            autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            style={{ display: 'block', width: '100%', marginBottom: 12 }}
+          />
+
+          <button type="submit" disabled={loading} style={{ width: '100%', padding: 10 }}>
+            {loading ? 'Please wait…' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={onSendReset}>
+          <label>Email</label>
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            style={{ display: 'block', width: '100%', marginBottom: 12 }}
+          />
+          <button type="submit" disabled={loading} style={{ width: '100%', padding: 10 }}>
+            {loading ? 'Please wait…' : 'Send reset email'}
+          </button>
+        </form>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        {mode !== 'sign-in' && (
+          <button onClick={() => setMode('sign-in')} style={{ marginRight: 8 }}>
+            Sign in
+          </button>
+        )}
+        {mode !== 'sign-up' && (
+          <button onClick={() => setMode('sign-up')} style={{ marginRight: 8 }}>
+            Sign up
+          </button>
+        )}
+        {mode !== 'reset' && <button onClick={() => setMode('reset')}>Forgot password?</button>}
+      </div>
+    </div>
+  )
+}
