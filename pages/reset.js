@@ -21,9 +21,6 @@ export default function ResetPassword() {
   useEffect(() => {
     const run = async () => {
       try {
-        // Supabase may send either:
-        //   /reset?code=...  (new)
-        //   /reset#type=recovery&access_token=...&refresh_token=... (old/hash)
         const url = new URL(window.location.href)
         const code = url.searchParams.get('code')
         const hashParams = getHashParams()
