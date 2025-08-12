@@ -122,8 +122,8 @@ export default function AuthPage() {
     if (!user || user.email?.toLowerCase() !== email.toLowerCase()) {
       // Not logged in as that email — send a reset link instead
       // (This emails a magic reset; user follows link to complete.)
-      const { error: linkErr } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth`,
+      const { error: linkErr } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset`,
       })
       if (linkErr) {
         setError(linkErr.message)
