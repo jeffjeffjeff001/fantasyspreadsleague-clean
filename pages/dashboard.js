@@ -21,6 +21,21 @@ export default function Dashboard() {
   const [lpPicks,    setLpPicks]    = useState([])
   const [lpLoading,  setLpLoading]  = useState(false)
 
+  // Render helpers for league picks (bold lock picks)
+  const renderPick = (p) => {
+    if (!p || !p.team) return ''
+    return p.isLock ? <strong>{p.team}</strong> : p.team
+  }
+  const renderBestList = (arr = []) => {
+    const upto = arr.slice(0, 3)
+    return upto.map((p, idx) => (
+      <span key={idx}>
+        {renderPick(p)}
+        {idx < upto.length - 1 ? ', ' : null}
+      </span>
+    ))
+  }
+
   // Fetch & compute the leaderboard on mount
   useEffect(() => {
     async function loadLeaderboard() {
@@ -73,8 +88,7 @@ export default function Dashboard() {
           username:     p.username,
           totalCorrect: 0,
           totalPoints:  0,
-          // track picks per week for perfect-week bonus
-          weeklyStats: {} 
+          weeklyStats: {}
         }
       })
 
@@ -85,7 +99,6 @@ export default function Dashboard() {
         const u = stats[pick.user_email]
         if (!u) return
 
-        // init this week counters
         if (!u.weeklyStats[week]) {
           u.weeklyStats[week] = { total: 0, correct: 0 }
         }
@@ -100,9 +113,7 @@ export default function Dashboard() {
 
         const spread    = parseFloat(g.spread)
         const homeCover = (result.home_score + spread) > result.away_score
-        const winner    = homeCover
-          ? result.home_team.trim()
-          : result.away_team.trim()
+        const winner    = homeCover ? result.home_team.trim() : result.away_team.trim()
 
         const picked = pick.selected_team.trim()
         if (picked === winner) {
@@ -117,7 +128,7 @@ export default function Dashboard() {
         }
       })
 
-      // 6) perfect-week bonus: +3 if user got all their picks correct that week
+      // 6) perfect-week bonus
       Object.values(stats).forEach(u => {
         Object.values(u.weeklyStats).forEach(ws => {
           if (ws.correct === ws.total) {
@@ -129,9 +140,7 @@ export default function Dashboard() {
       // 7) sort
       const list = Object.values(stats)
       list.sort((a, b) => {
-        if (b.totalPoints !== a.totalPoints) {
-          return b.totalPoints - a.totalPoints
-        }
+        if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints
         return b.totalCorrect - a.totalCorrect
       })
 
@@ -167,14 +176,14 @@ export default function Dashboard() {
   async function loadLeaguePicks() {
     setLpLoading(true)
     try {
-      // 1) fetch profiles for username lookup
+      // 1) profiles for username lookup
       const { data: profiles } = await supabase
         .from('profiles')
         .select('email,username')
       const userMap = {}
       profiles.forEach(p => { userMap[p.email] = p.username })
 
-      // 2) fetch picks+games for lpWeek
+      // 2) picks+games for lpWeek
       const { data: picks, error } = await supabase
         .from('picks')
         .select(`
@@ -196,38 +205,37 @@ export default function Dashboard() {
         return
       }
 
-      // 3) group by user
+      // 3) group by user (preserve lock to render bold)
       const grouped = {}
       picks.forEach(pick => {
-        // <— GUARD AGAINST NULL
         if (!pick.games) return
-
         const email = pick.user_email
         if (!grouped[email]) {
           grouped[email] = {
-            username:  userMap[email] || email,
-            thursday:  '',
-            best:      [],
-            monday:    ''
+            username: userMap[email] || email,
+            thursday: null,   // {team, isLock} | null
+            best:     [],     // Array<{team, isLock}>
+            monday:   null    // {team, isLock} | null
           }
         }
+
         const kt   = new Date(pick.games.kickoff_time)
         const day  = kt.getDay()  // 0=Sun,1=Mon...4=Thu
-        const team = pick.selected_team.trim()
+        const item = { team: pick.selected_team.trim(), isLock: !!pick.is_lock }
 
-        if (day === 4)      grouped[email].thursday = team
-        else if (day === 1) grouped[email].monday   = team
-        else                grouped[email].best.push(team)
+        if (day === 4)      grouped[email].thursday = item
+        else if (day === 1) grouped[email].monday   = item
+        else                grouped[email].best.push(item)
       })
 
-      // ── ensure every league member appears (even with no picks) ─────────
+      // Ensure every league member appears (even with no picks)
       profiles.forEach(p => {
         if (!grouped[p.email]) {
           grouped[p.email] = {
             username: p.username,
-            thursday: '',
+            thursday: null,
             best:     [],
-            monday:   ''
+            monday:   null
           }
         }
       })
@@ -276,8 +284,8 @@ export default function Dashboard() {
               <tr>
                 <th>Email</th>
                 <th>Correct</th>
-                <th>Lock ✔</th>
-                <th>Lock ✘</th>
+                <th>Lock ✔</th>
+                <th>Lock ✘</th>
                 <th>Bonus</th>
                 <th>Points</th>
               </tr>
@@ -307,8 +315,8 @@ export default function Dashboard() {
               <tr>
                 <th>Rank</th>
                 <th>Username</th>
-                <th>Total Correct</th>
-                <th>Total Points</th>
+                <th>Total Correct</th>
+                <th>Total Points</th>
               </tr>
             </thead>
             <tbody>
@@ -327,7 +335,7 @@ export default function Dashboard() {
 
       {/* League Picks */}
       <section style={{ marginTop: 60 }}>
-        <h2>League Picks</h2>
+        <h2>League Picks <small style={{ color:'#94a3b8', fontWeight: 400 }}>(lock picks appear in bold)</small></h2>
         <div style={{ marginBottom: 12 }}>
           <label>
             Week:&nbsp;
@@ -356,18 +364,18 @@ export default function Dashboard() {
             <thead>
               <tr>
                 <th>Username</th>
-                <th>Thursday Pick</th>
-                <th>Best‑3 Picks</th>
-                <th>Monday Pick</th>
+                <th>Thursday Pick</th>
+                <th>Best-3 Picks</th>
+                <th>Monday Pick</th>
               </tr>
             </thead>
             <tbody>
               {lpPicks.map((u, i) => (
                 <tr key={i}>
                   <td>{u.username}</td>
-                  <td style={{ textAlign: 'center' }}>{u.thursday}</td>
-                  <td>{u.best.slice(0,3).join(', ')}</td>
-                  <td style={{ textAlign: 'center' }}>{u.monday}</td>
+                  <td style={{ textAlign: 'center' }}>{renderPick(u.thursday)}</td>
+                  <td>{renderBestList(u.best)}</td>
+                  <td style={{ textAlign: 'center' }}>{renderPick(u.monday)}</td>
                 </tr>
               ))}
             </tbody>
