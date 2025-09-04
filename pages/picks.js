@@ -23,10 +23,15 @@ export default function PickSubmission() {
       setPicks({})
       setLockPick(null)
 
+      // DB-side filtering using UTC timestamptz + 60s grace
+      const GRACE_MS = 60 * 1000
+      const nowIso = new Date(Date.now() - GRACE_MS).toISOString()
+
       const { data, error } = await supabase
         .from('games')
         .select('*')
         .eq('week', selectedWeek)
+        .gte('kickoff_time', nowIso)
         .order('kickoff_time', { ascending: true })
 
       if (error) {
@@ -35,15 +40,7 @@ export default function PickSubmission() {
         return
       }
 
-      // Keep all games until *local* kickoff (with a 60s grace window)
-      const nowMs = Date.now()
-      const GRACE_MS = 60 * 1000
-      const upcoming = (data || []).filter(g => {
-        const t = new Date(g.kickoff_time).getTime()
-        return Number.isFinite(t) && nowMs <= t + GRACE_MS
-      })
-
-      setGames(upcoming)
+      setGames(data || [])
     }
 
     loadGames()
