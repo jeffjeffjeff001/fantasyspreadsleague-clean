@@ -15,24 +15,37 @@ export default function PickSubmission() {
   const [lockPick, setLockPick]         = useState(null)
   const [status, setStatus]             = useState(null)
 
-  // Load games once user is signed‑in
+  // Load games once user is signed-in
   useEffect(() => {
     if (!session) return
     const loadGames = async () => {
       setStatus(null)
       setPicks({})
       setLockPick(null)
-      const now = new Date().toISOString()
+
       const { data, error } = await supabase
         .from('games')
         .select('*')
         .eq('week', selectedWeek)
-        .gt('kickoff_time', now)
         .order('kickoff_time', { ascending: true })
 
-      if (error) setStatus(`🚫 ${error.message}`)
-      else setGames(data || [])
+      if (error) {
+        setStatus(`🚫 ${error.message}`)
+        setGames([])
+        return
+      }
+
+      // Keep all games until *local* kickoff (with a 60s grace window)
+      const nowMs = Date.now()
+      const GRACE_MS = 60 * 1000
+      const upcoming = (data || []).filter(g => {
+        const t = new Date(g.kickoff_time).getTime()
+        return Number.isFinite(t) && nowMs <= t + GRACE_MS
+      })
+
+      setGames(upcoming)
     }
+
     loadGames()
   }, [selectedWeek, session])
 
@@ -40,33 +53,34 @@ export default function PickSubmission() {
     return (
       <div style={{ padding: 20 }}>
         <p>
-          <Link href="/join‑league"><a>Please join the league to submit picks →</a></Link>
+          <Link href="/join-league"><a>Please join the league to submit picks →</a></Link>
         </p>
       </div>
     )
   }
 
   // Helpers — use local getDay() so Thu/Mon buckets match user TZ
-  const countCats  = map => {
+  const findGameById = (id) => games.find(x => String(x.id) === String(id))
+
+  const countCats = map => {
     let th = 0, mo = 0, be = 0
     Object.keys(map).forEach(id => {
-      const g = games.find(x => x.id === id)
+      const g = findGameById(id)
       if (!g) return
       const day = new Date(g.kickoff_time).getDay()
       if (day === 4)       th++
       else if (day === 1)  mo++
       else                 be++
     })
-    console.log('counts →', { th, mo, be })
     return { th, mo, be }
   }
 
-  // ← UPDATED handlePick to special-case WEEK 18
+  // ← UPDATED handlePick to special-case WEEK 18
   const handlePick = (gid, team) => {
     setStatus(null)
     const copy = { ...picks }
 
-    // un‑select same pick
+    // un-select same pick
     if (copy[gid] === team) {
       delete copy[gid]
       setPicks(copy)
@@ -84,15 +98,15 @@ export default function PickSubmission() {
     const { th, mo, be } = countCats(copy)
 
     if (selectedWeek === 18) {
-      // Week 18: only "best" picks allowed, up to 5
+      // Week 18: only "best" picks allowed, up to 5
       if (th > 0 || mo > 0) {
         delete copy[gid]
-        setStatus('🚫 Week 18 only “Best” picks allowed.')
+        setStatus('🚫 Week 18 only “Best” picks allowed.')
         return
       }
       if (be > 5) {
         delete copy[gid]
-        setStatus('🚫 Only 5 picks allowed in Week 18.')
+        setStatus('🚫 Only 5 picks allowed in Week 18.')
         return
       }
     } else {
@@ -135,7 +149,7 @@ export default function PickSubmission() {
       return
     }
     const submittedIds = entries.map(([gid]) => gid)
-    setGames(prev => prev.filter(g => !submittedIds.includes(g.id)))
+    setGames(prev => prev.filter(g => !submittedIds.includes(String(g.id))))
     setPicks({})
     setLockPick(null)
     setStatus('✅ Picks submitted—those games are now hidden.')
@@ -196,7 +210,7 @@ export default function PickSubmission() {
                 type="radio"
                 name={`pick-${g.id}`}
                 checked={picks[g.id]===g.home_team}
-                onClick={()=>handlePick(g.id,g.home_team)}
+                onChange={()=>handlePick(g.id,g.home_team)}
               />{' '}
               {g.home_team}
             </label>
@@ -205,7 +219,7 @@ export default function PickSubmission() {
                 type="radio"
                 name={`pick-${g.id}`}
                 checked={picks[g.id]===g.away_team}
-                onClick={()=>handlePick(g.id,g.away_team)}
+                onChange={()=>handlePick(g.id,g.away_team)}
               />{' '}
               {g.away_team}
             </label>
