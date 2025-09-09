@@ -26,7 +26,7 @@ export default function Admin() {
   const [userPicks, setUserPicks]         = useState([])
   const [loadingPicks, setLoadingPicks]   = useState(false)
 
-  const [weeklyScores, setWeeklyScores]   = useState([])
+  const [weeklyScores, setWeeklyScores]   = useState([])   // shown in existing table
   const [loadingScores, setLoadingScores] = useState(false)
 
   useEffect(() => {
@@ -213,18 +213,110 @@ export default function Admin() {
     else loadUserPicks()
   }
 
-  // ── Calculate scores ───────────────────────────────────────────────
+  // ── Calculate Weekly Scores (client-side to match Dashboard) ──────
   async function calculateScores() {
     setLoadingScores(true)
-    const res  = await fetch(`/api/weekly-scores?week=${selectedWeek}`)
-    const data = await res.json()
-    if (!res.ok) {
-      alert('Error calculating scores: ' + (data.error || JSON.stringify(data)))
+    try {
+      // 1) profiles
+      const { data: profileRows, error: profErr } = await supabase
+        .from('profiles')
+        .select('email,username')
+      if (profErr) throw profErr
+
+      // 2) results for selectedWeek
+      const { data: results, error: resErr } = await supabase
+        .from('results')
+        .select('away_team,home_team,away_score,home_score,week')
+        .eq('week', selectedWeek)
+      if (resErr) throw resErr
+
+      // 3) picks (with games) for selectedWeek
+      const { data: picks, error: pickErr } = await supabase
+        .from('picks')
+        .select(`
+          user_email,
+          selected_team,
+          is_lock,
+          games (
+            away_team,
+            home_team,
+            spread,
+            week
+          )
+        `)
+        .eq('games.week', selectedWeek)
+      if (pickErr) throw pickErr
+
+      // 4) score exactly like Dashboard
+      const stats = {}
+      profileRows.forEach(p => {
+        stats[p.email] = {
+          email:         p.email,
+          weeklyPoints:  0,
+          correct:       0,
+          lockCorrect:   0,
+          lockIncorrect: 0,
+          perfectBonus:  0,
+          weeklyTotal:   0,
+        }
+      })
+
+      picks.forEach(pick => {
+        const g = pick.games
+        if (!g) return
+        const u = stats[pick.user_email]
+        if (!u) return
+
+        u.weeklyTotal += 1
+
+        const result = results.find(r =>
+          r.week === g.week &&
+          r.home_team.trim() === g.home_team.trim() &&
+          r.away_team.trim() === g.away_team.trim()
+        )
+        if (!result) return
+
+        const spread    = parseFloat(g.spread)
+        const homeCover = (result.home_score + spread) > result.away_score
+        const winner    = homeCover ? result.home_team.trim() : result.away_team.trim()
+
+        const picked = pick.selected_team.trim()
+        if (picked === winner) {
+          u.correct += 1
+          u.weeklyPoints += 1
+          if (pick.is_lock) {
+            u.lockCorrect += 1
+            u.weeklyPoints += 2
+          }
+        } else if (pick.is_lock) {
+          u.lockIncorrect += 1
+          u.weeklyPoints -= 2
+        }
+      })
+
+      // perfect-week bonus (+3 if user got all their picks correct that week)
+      Object.values(stats).forEach(u => {
+        if (u.weeklyTotal > 0 && u.correct === u.weeklyTotal) {
+          u.perfectBonus += 3
+          u.weeklyPoints += 3
+        }
+      })
+
+      // show only users who made picks this week; sort by points desc, then correct desc
+      const arr = Object.values(stats).filter(u => u.weeklyTotal > 0)
+      arr.sort((a, b) => {
+        if (b.weeklyPoints !== a.weeklyPoints) return b.weeklyPoints - a.weeklyPoints
+        return b.correct - a.correct
+      })
+
+      setWeeklyScores(arr)
+    } catch (err) {
+      console.error(err)
+      alert('Error calculating scores: ' + err.message)
       setWeeklyScores([])
-    } else {
-      setWeeklyScores(data)
+    } finally {
+      setLoadingScores(false)
     }
-    setLoadingScores(false)
   }
 
   return (
@@ -236,17 +328,17 @@ export default function Admin() {
       <section style={{ marginTop: 20 }}>
         <h2>Game Management (Week {selectedWeek})</h2>
         <div style={{ marginBottom: 12 }}>
-        <label>Week:&nbsp;
-          <select
-            value={selectedWeek}
-            onChange={e => setSelectedWeek(parseInt(e.target.value,10))}
-            style={{ width: 60 }}
-          >
-            {Array.from({ length: 18 }, (_, i) => i + 1).map(wk => (
-              <option key={wk} value={wk}>{wk}</option>
-            ))}
-          </select>
-        </label>
+          <label>Week:&nbsp;
+            <select
+              value={selectedWeek}
+              onChange={e => setSelectedWeek(parseInt(e.target.value,10))}
+              style={{ width: 60 }}
+            >
+              {Array.from({ length: 18 }, (_, i) => i + 1).map(wk => (
+                <option key={wk} value={wk}>{wk}</option>
+              ))}
+            </select>
+          </label>
           <button onClick={handleClearWeek} style={{ marginLeft: 12 }}>
             Clear Week
           </button>
@@ -261,7 +353,7 @@ export default function Admin() {
                 <th style={{ border: '1px solid #ccc', padding: 8 }}>Home</th>
                 <th style={{ border: '1px solid #ccc', padding: 8 }}>Spread</th>
                 <th style={{ border: '1px solid #ccc', padding: 8 }}>Kickoff</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Actions</th>
+                <th style={{ border: '1px solid ' + '#ccc', padding: 8 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -272,7 +364,7 @@ export default function Admin() {
                   <td style={{ border: '1px solid #ccc', padding: 8 }}>
                     {g.spread > 0 ? `+${g.spread}` : g.spread}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>
+                  <td style={{ border: '1px solid '#ccc', padding: 8 }}>
                     {new Date(g.kickoff_time).toLocaleString()}
                   </td>
                   <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>
@@ -356,35 +448,34 @@ export default function Admin() {
         )}
       </section>
 
-{/* View User Picks */}
-<section style={{ marginTop: 40 }}>
-  <h2>View User Picks</h2>
-  <div style={{ marginBottom: 12 }}>
-    <select
-      value={userForPicks}
-      onChange={e => setUserForPicks(e.target.value)}
-    >
-      <option value="">Select user</option>
-      {profiles.map(p => (
-        <option key={p.email} value={p.email}>{p.username}</option>
-      ))}
-    </select>
+      {/* View User Picks */}
+      <section style={{ marginTop: 40 }}>
+        <h2>View User Picks</h2>
+        <div style={{ marginBottom: 12 }}>
+          <select
+            value={userForPicks}
+            onChange={e => setUserForPicks(e.target.value)}
+          >
+            <option value="">Select user</option>
+            {profiles.map(p => (
+              <option key={p.email} value={p.email}>{p.username}</option>
+            ))}
+          </select>
 
-    {/* ← replaced number input with dropdown */}
-    <select
-      value={weekForPicks}
-      onChange={e => setWeekForPicks(parseInt(e.target.value, 10))}
-      style={{ width: 60, marginLeft: 8 }}
-    >
-      {Array.from({ length: 18 }, (_, i) => i + 1).map(wk => (
-        <option key={wk} value={wk}>{wk}</option>
-      ))}
-    </select>
+          <select
+            value={weekForPicks}
+            onChange={e => setWeekForPicks(parseInt(e.target.value, 10))}
+            style={{ width: 60, marginLeft: 8 }}
+          >
+            {Array.from({ length: 18 }, (_, i) => i + 1).map(wk => (
+              <option key={wk} value={wk}>{wk}</option>
+            ))}
+          </select>
 
-    <button onClick={loadUserPicks} style={{ marginLeft: 8 }}>
-      Load Picks
-    </button>
-  </div>
+          <button onClick={loadUserPicks} style={{ marginLeft: 8 }}>
+            Load Picks
+          </button>
+        </div>
         {loadingPicks ? (
           <p>Loading picks…</p>
         ) : (
@@ -428,7 +519,7 @@ export default function Admin() {
         )}
       </section>
 
-      {/* Calculate Weekly Scores */}
+      {/* Calculate Weekly Scores (existing table, corrected math) */}
       <section style={{ marginTop: 40 }}>
         <h2>Calculate Scores (Week {selectedWeek})</h2>
         <button onClick={calculateScores}>Calculate Scores</button>
@@ -440,8 +531,8 @@ export default function Admin() {
                 <th style={{ border:'1px solid #ccc', padding: 8 }}>Email</th>
                 <th style={{ border:'1px solid #ccc', padding: 8 }}>Points</th>
                 <th style={{ border:'1px solid #ccc', padding: 8 }}>Correct</th>
-                <th style={{ border:'1px solid #ccc', padding: 8 }}>Lock ✔</th>
-                <th style={{ border:'1px solid #ccc', padding: 8 }}>Lock ✘</th>
+                <th style={{ border:'1px solid #ccc', padding: 8 }}>Lock ✔</th>
+                <th style={{ border:'1px solid #ccc', padding: 8 }}>Lock ✘</th>
                 <th style={{ border:'1px solid #ccc', padding: 8 }}>Bonus</th>
               </tr>
             </thead>
