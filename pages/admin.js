@@ -353,7 +353,7 @@ export default function Admin() {
                 <th style={{ border: '1px solid #ccc', padding: 8 }}>Home</th>
                 <th style={{ border: '1px solid #ccc', padding: 8 }}>Spread</th>
                 <th style={{ border: '1px solid #ccc', padding: 8 }}>Kickoff</th>
-                <th style={{ border: '1px solid ' + '#ccc', padding: 8 }}>Actions</th>
+                <th style={{ border: '1px solid #ccc', padding: 8 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -364,7 +364,7 @@ export default function Admin() {
                   <td style={{ border: '1px solid #ccc', padding: 8 }}>
                     {g.spread > 0 ? `+${g.spread}` : g.spread}
                   </td>
-                  <td style={{ border: '1px solid '#ccc', padding: 8 }}>
+                  <td style={{ border: '1px solid #ccc', padding: 8 }}>
                     {new Date(g.kickoff_time).toLocaleString()}
                   </td>
                   <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>
