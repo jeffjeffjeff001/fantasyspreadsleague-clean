@@ -2,6 +2,7 @@
 import '../styles/globals.css'
 import Link from '../components/LegacyLink'
 import { AuthProvider } from '../context/AuthContext'
+import { Analytics } from "@vercel/analytics/react"
 
 export default function MyApp({ Component, pageProps }) {
   return (
@@ -48,6 +49,7 @@ export default function MyApp({ Component, pageProps }) {
           © {new Date().getFullYear()} Football Junkie
         </footer>
       </div>
+      <Analytics />
     </AuthProvider>
   )
 }
