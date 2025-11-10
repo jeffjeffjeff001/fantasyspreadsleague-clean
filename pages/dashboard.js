@@ -172,66 +172,78 @@ export default function Dashboard() {
     }
   }
 
-  // — Load & group league picks —
+  // — Load & group league picks (robust to nested-join quirks/RLS) —
   async function loadLeaguePicks() {
     setLpLoading(true)
     try {
       // 1) profiles for username lookup
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profErr } = await supabase
         .from('profiles')
         .select('email,username')
+      if (profErr) throw profErr
+
+      // normalize to a simple lookup (lowercase emails)
       const userMap = {}
-      profiles.forEach(p => { userMap[p.email] = p.username })
+      ;(profiles || []).forEach(p => {
+        if (!p?.email) return
+        userMap[p.email.toLowerCase()] = p.username
+      })
 
-      // 2) picks+games for lpWeek
-      const { data: picks, error } = await supabase
-        .from('picks')
-        .select(`
-          user_email,
-          selected_team,
-          is_lock,
-          games (
-            away_team,
-            home_team,
-            kickoff_time,
-            week
-          )
-        `)
-        .eq('games.week', lpWeek)
+      // 2) fetch the week's games first (ids + kickoff for day-bucketing)
+      const { data: games, error: gamesErr } = await supabase
+        .from('games')
+        .select('id, kickoff_time, week')
+        .eq('week', lpWeek)
+        .order('kickoff_time', { ascending: true })
+      if (gamesErr) throw gamesErr
 
-      if (error) {
-        console.error(error)
+      if (!games || games.length === 0) {
         setLpPicks([])
         return
       }
 
-      // 3) group by user (preserve lock to render bold)
+      const gameIds = games.map(g => g.id)
+      const gamesById = Object.fromEntries(games.map(g => [String(g.id), g]))
+
+      // 3) fetch picks via explicit IN on game_id (no nested filter)
+      const { data: picks, error: picksErr } = await supabase
+        .from('picks')
+        .select('user_email, selected_team, is_lock, game_id')
+        .in('game_id', gameIds)
+      if (picksErr) throw picksErr
+
+      // 4) group by user (preserve lock to render bold)
       const grouped = {}
-      picks.forEach(pick => {
-        if (!pick.games) return
-        const email = pick.user_email
-        if (!grouped[email]) {
-          grouped[email] = {
-            username: userMap[email] || email,
+      for (const pk of (picks || [])) {
+        const g = gamesById[String(pk.game_id)]
+        if (!g) continue
+
+        const emailKey = (pk.user_email || '').toLowerCase()
+        if (!grouped[emailKey]) {
+          grouped[emailKey] = {
+            username: userMap[emailKey] || pk.user_email || emailKey,
             thursday: null,   // {team, isLock} | null
             best:     [],     // Array<{team, isLock}>
             monday:   null    // {team, isLock} | null
           }
         }
 
-        const kt   = new Date(pick.games.kickoff_time)
-        const day  = kt.getDay()  // 0=Sun,1=Mon...4=Thu
-        const item = { team: pick.selected_team.trim(), isLock: !!pick.is_lock }
+        const day  = new Date(g.kickoff_time).getDay() // 0=Sun,1=Mon,...,4=Thu (local TZ)
+        const item = {
+          team: (pk.selected_team && pk.selected_team.trim) ? pk.selected_team.trim() : pk.selected_team,
+          isLock: !!pk.is_lock
+        }
 
-        if (day === 4)      grouped[email].thursday = item
-        else if (day === 1) grouped[email].monday   = item
-        else                grouped[email].best.push(item)
-      })
+        if (day === 4)      grouped[emailKey].thursday = item
+        else if (day === 1) grouped[emailKey].monday   = item
+        else                grouped[emailKey].best.push(item)
+      }
 
       // Ensure every league member appears (even with no picks)
-      profiles.forEach(p => {
-        if (!grouped[p.email]) {
-          grouped[p.email] = {
+      ;(profiles || []).forEach(p => {
+        const k = (p.email || '').toLowerCase()
+        if (k && !grouped[k]) {
+          grouped[k] = {
             username: p.username,
             thursday: null,
             best:     [],
@@ -240,8 +252,15 @@ export default function Dashboard() {
         }
       })
 
-      // 4) to array
-      setLpPicks(Object.values(grouped))
+      // Optional: sort by username for consistent display
+      const list = Object.values(grouped).sort((a, b) =>
+        (a.username || '').localeCompare(b.username || '')
+      )
+
+      setLpPicks(list)
+    } catch (err) {
+      console.error('loadLeaguePicks error:', err)
+      setLpPicks([])
     } finally {
       setLpLoading(false)
     }
