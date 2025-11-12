@@ -47,7 +47,7 @@ export default function Dashboard() {
   const keyOf = (w, home, away) => `${w}|${normTeam(home)}|${normTeam(away)}`
 
   // ====================================================================
-  // Fetch & compute the leaderboard (pick-first, bulletproof join)
+  // Fetch & compute the leaderboard (single joined query: picks ⟂ games)
   // ====================================================================
   useEffect(() => {
     async function loadLeaderboard() {
@@ -65,35 +65,7 @@ export default function Dashboard() {
           usernameByEmail[p.email.trim().toLowerCase()] = p.username || p.email
         })
 
-        // 2) ALL picks (no nested games join)
-        const { data: picks, error: pickErr } = await supabase
-          .from('picks')
-          .select('user_email, selected_team, is_lock, game_id')
-        if (pickErr) throw pickErr
-
-        // If nobody has picks yet, bail early
-        if (!picks || picks.length === 0) {
-          setLeaderboard([])
-          setLbLoading(false)
-          return
-        }
-
-        // 3) Build the unique set of game_ids from picks
-        const gameIdSet = new Set(picks.map(p => String(p.game_id)).filter(Boolean))
-        const gameIds = Array.from(gameIdSet)
-
-        // 4) Fetch only those games so every pick can resolve its game
-        const { data: games, error: gamesErr } = await supabase
-          .from('games')
-          .select('id, away_team, home_team, spread, week')
-          .in('id', gameIds)
-        if (gamesErr) throw gamesErr
-
-        const gamesById = Object.fromEntries(
-          (games || []).map(g => [String(g.id), g])
-        )
-
-        // 5) ALL results → normalized lookup
+        // 2) Pull ALL results to a normalized lookup
         const { data: results, error: resErr } = await supabase
           .from('results')
           .select('away_team,home_team,away_score,home_score,week')
@@ -104,7 +76,25 @@ export default function Dashboard() {
           resultsByKey[keyOf(r.week, r.home_team, r.away_team)] = r
         })
 
-        // 6) Init stats for every profile (so users with zero picks still appear)
+        // 3) Pick-first load using INNER JOIN on games
+        //    This guarantees each row has a valid games record.
+        const { data: pickRows, error: pickErr } = await supabase
+          .from('picks')
+          .select(`
+            user_email,
+            selected_team,
+            is_lock,
+            games!inner (
+              id,
+              week,
+              home_team,
+              away_team,
+              spread
+            )
+          `)
+        if (pickErr) throw pickErr
+
+        // 4) Init stats for every profile
         const stats = {}
         ;(profiles || []).forEach(p => {
           if (!p?.email) return
@@ -117,43 +107,57 @@ export default function Dashboard() {
           }
         })
 
-        // 7) Score every pick (resolves via game_id -> gamesById)
-        const missingGameIds = new Set()
-        ;(picks || []).forEach(pick => {
-          const g = gamesById[String(pick.game_id)]
-          if (!g) { missingGameIds.add(String(pick.game_id)); return }
+        // For DEBUG: collect Joe’s week 10 rows to confirm 5 picks are seen
+        const joeKey = 'kemmejd@gmail.com'
+        const joeRows = []
 
-          const ek = (pick.user_email || '').trim().toLowerCase()
-          const u = stats[ek]
+        // 5) Score each pick row
+        ;(pickRows || []).forEach(row => {
+          const g = row.games
+          if (!g) return
+
+          const ek = (row.user_email || '').trim().toLowerCase()
+          const u  = stats[ek]
           if (!u) return
 
           const week = g.week
           if (!u.weeklyStats[week]) u.weeklyStats[week] = { total: 0, correct: 0 }
           u.weeklyStats[week].total += 1
 
-          const r = resultsByKey[keyOf(week, g.home_team, g.away_team)]
-          if (!r) return
+          const rKey = keyOf(week, g.home_team, g.away_team)
+          const r    = resultsByKey[rKey]
+          if (!r) return  // no result yet → count total but cannot score
 
-          const spread = parseFloat(g.spread) || 0
+          const spread    = parseFloat(g.spread) || 0
           const homeCover = (r.home_score + spread) > r.away_score
-          const winner = homeCover ? normTeam(g.home_team) : normTeam(g.away_team)
-          const picked = normTeam(pick.selected_team)
+          const winner    = homeCover ? normTeam(g.home_team) : normTeam(g.away_team)
+          const picked    = normTeam(row.selected_team)
 
-          if (picked === winner) {
+          const correct = picked === winner
+          if (correct) {
             u.totalCorrect += 1
             u.totalPoints  += 1
             u.weeklyStats[week].correct += 1
-            if (pick.is_lock) u.totalPoints += 2
-          } else if (pick.is_lock) {
+            if (row.is_lock) u.totalPoints += 2
+          } else if (row.is_lock) {
             u.totalPoints -= 2
+          }
+
+          if (ek === joeKey.trim().toLowerCase() && week === 10) {
+            joeRows.push({
+              game_id: g.id,
+              week: g.week,
+              home: g.home_team,
+              away: g.away_team,
+              spread: g.spread,
+              result: r ? `${r.away_team} ${r.away_score} @ ${r.home_team} ${r.home_score}` : 'NO_RESULT',
+              picked: row.selected_team,
+              correct
+            })
           }
         })
 
-        if (missingGameIds.size) {
-          console.warn('[DEBUG] leaderboard: picks referencing unknown game_ids:', Array.from(missingGameIds))
-        }
-
-        // 8) perfect-week bonus (+3 when all picks that week are correct)
+        // 6) perfect-week bonus (+3) for any week where correct == total (>0)
         Object.values(stats).forEach(u => {
           Object.values(u.weeklyStats).forEach(ws => {
             if (ws.total > 0 && ws.correct === ws.total) {
@@ -162,7 +166,7 @@ export default function Dashboard() {
           })
         })
 
-        // 9) Sort and set
+        // 7) Sort leaderboard
         const list = Object.values(stats)
         list.sort((a, b) => {
           if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints
@@ -170,8 +174,7 @@ export default function Dashboard() {
         })
         setLeaderboard(list)
 
-        // DEBUG for Joe
-        const joeKey = 'kemmejd@gmail.com'
+        // DEBUG: show Joe’s week-by-week totals plus the five week-10 rows
         const joe = stats[joeKey.trim().toLowerCase()]
         if (joe) {
           const joeWeeks = Object.entries(joe.weeklyStats)
@@ -180,6 +183,7 @@ export default function Dashboard() {
           const sumCorrect = joeWeeks.reduce((s, w) => s + (w.correct || 0), 0)
           const sumTotal   = joeWeeks.reduce((s, w) => s + (w.total   || 0), 0)
           console.log('[DEBUG] Joe weeks:', joeWeeks)
+          console.table(joeRows)
           console.log('[DEBUG] Joe sums:', { sumTotal, sumCorrect, totalPoints: joe.totalPoints })
         }
       } catch (err) {
@@ -215,7 +219,7 @@ export default function Dashboard() {
     }
   }
 
-  // — Load & group league picks (robust to nested-join quirks/RLS) —
+  // — Load & group league picks (unchanged robust version) —
   async function loadLeaguePicks() {
     setLpLoading(true)
     try {
