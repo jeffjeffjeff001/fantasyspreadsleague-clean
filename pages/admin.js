@@ -213,7 +213,7 @@ export default function Admin() {
     else loadUserPicks()
   }
 
-  // ── Calculate Weekly Scores (client-side to match Dashboard) ──────
+  // ── Calculate Weekly Scores (bullet-proof weeklyTotal) ─────────────
   async function calculateScores() {
     setLoadingScores(true)
     try {
@@ -226,20 +226,35 @@ export default function Admin() {
       // 2) results for selectedWeek
       const { data: results, error: resErr } = await supabase
         .from('results')
-        .select('away_team,home_team,away_score,home_score,week')
+        .select('home_team, away_team, home_score, away_score, week')
         .eq('week', selectedWeek)
       if (resErr) throw resErr
 
-      // 3) picks (with games) for selectedWeek
+      // helper to normalize strings
+      const norm = (s) => (s ?? '').trim()
+
+      // 3) reliable weekly totals using an explicit inner join + group by
+      const { data: totals, error: totalsErr } = await supabase
+        .from('picks')
+        .select('user_email, games!inner(week)')
+        .eq('games.week', selectedWeek)
+      if (totalsErr) throw totalsErr
+
+      const weeklyTotalByUser = {}
+      for (const r of totals || []) {
+        weeklyTotalByUser[r.user_email] = (weeklyTotalByUser[r.user_email] || 0) + 1
+      }
+
+      // 4) all picks for this week with games via explicit inner join
       const { data: picks, error: pickErr } = await supabase
         .from('picks')
         .select(`
           user_email,
           selected_team,
           is_lock,
-          games (
-            away_team,
+          games!inner (
             home_team,
+            away_team,
             spread,
             week
           )
@@ -247,7 +262,7 @@ export default function Admin() {
         .eq('games.week', selectedWeek)
       if (pickErr) throw pickErr
 
-      // 4) score exactly like Dashboard
+      // 5) seed per-user stats with authoritative weeklyTotal
       const stats = {}
       profileRows.forEach(p => {
         stats[p.email] = {
@@ -257,30 +272,29 @@ export default function Admin() {
           lockCorrect:   0,
           lockIncorrect: 0,
           perfectBonus:  0,
-          weeklyTotal:   0,
+          weeklyTotal:   weeklyTotalByUser[p.email] || 0,
         }
       })
 
-      picks.forEach(pick => {
+      // 6) score picks
+      for (const pick of picks || []) {
         const g = pick.games
-        if (!g) return
+        if (!g) continue
         const u = stats[pick.user_email]
-        if (!u) return
-
-        u.weeklyTotal += 1
+        if (!u) continue
 
         const result = results.find(r =>
           r.week === g.week &&
-          r.home_team.trim() === g.home_team.trim() &&
-          r.away_team.trim() === g.away_team.trim()
+          norm(r.home_team) === norm(g.home_team) &&
+          norm(r.away_team) === norm(g.away_team)
         )
-        if (!result) return
+        if (!result) continue
 
-        const spread    = parseFloat(g.spread)
+        const spread    = Number(g.spread)
         const homeCover = (result.home_score + spread) > result.away_score
-        const winner    = homeCover ? result.home_team.trim() : result.away_team.trim()
+        const winner    = homeCover ? norm(result.home_team) : norm(result.away_team)
 
-        const picked = pick.selected_team.trim()
+        const picked = norm(pick.selected_team)
         if (picked === winner) {
           u.correct += 1
           u.weeklyPoints += 1
@@ -292,22 +306,19 @@ export default function Admin() {
           u.lockIncorrect += 1
           u.weeklyPoints -= 2
         }
-      })
+      }
 
-      // perfect-week bonus (+3 if user got all their picks correct that week)
-      Object.values(stats).forEach(u => {
+      // 7) perfect-week bonus (+3 if correct === weeklyTotal)
+      for (const u of Object.values(stats)) {
         if (u.weeklyTotal > 0 && u.correct === u.weeklyTotal) {
-          u.perfectBonus += 3
+          u.perfectBonus = 3
           u.weeklyPoints += 3
         }
-      })
+      }
 
-      // show only users who made picks this week; sort by points desc, then correct desc
+      // 8) only users who made picks this week; sort by points then correct
       const arr = Object.values(stats).filter(u => u.weeklyTotal > 0)
-      arr.sort((a, b) => {
-        if (b.weeklyPoints !== a.weeklyPoints) return b.weeklyPoints - a.weeklyPoints
-        return b.correct - a.correct
-      })
+      arr.sort((a, b) => (b.weeklyPoints - a.weeklyPoints) || (b.correct - a.correct))
 
       setWeeklyScores(arr)
     } catch (err) {
