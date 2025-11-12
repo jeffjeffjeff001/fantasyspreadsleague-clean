@@ -21,7 +21,6 @@ export default function Dashboard() {
   const [lpPicks,    setLpPicks]    = useState([])
   const [lpLoading,  setLpLoading]  = useState(false)
 
-  // ─────────────────────────────────────────────────────────────────────
   // Render helpers for league picks (bold lock picks)
   const renderPick = (p) => {
     if (!p || !p.team) return ''
@@ -37,20 +36,17 @@ export default function Dashboard() {
     ))
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Normalization used for matching results<->games and picked team text
+  // Normalization for matching
   const normTeam = (s) =>
     (s || '')
       .replace(/\u00A0/g, ' ')  // NBSP → space
-      .replace(/\s+/g, ' ')     // collapse multiple spaces
+      .replace(/\s+/g, ' ')     // collapse multi spaces
       .trim()
       .toUpperCase()
 
   const keyOf = (w, home, away) => `${w}|${normTeam(home)}|${normTeam(away)}`
 
-  // ====================================================================
-  // Fetch & compute the leaderboard on mount — NO nested join dependency
-  // ====================================================================
+  // Fetch & compute the leaderboard on mount — no nested join dependency
   useEffect(() => {
     async function loadLeaderboard() {
       setLbLoading(true)
@@ -77,7 +73,7 @@ export default function Dashboard() {
           resultsByKey[keyOf(r.week, r.home_team, r.away_team)] = r
         })
 
-        // 3) ALL games → map by id (avoid nested join)
+        // 3) ALL games → map by id
         const { data: games, error: gamesErr } = await supabase
           .from('games')
           .select('id, away_team, home_team, spread, week')
@@ -157,7 +153,7 @@ export default function Dashboard() {
           })
         })
 
-        // ---- DEBUG: Joe
+        // ---- Optional debug for Joe
         const joeEmail = 'kemmejd@gmail.com'
         const joeKey   = joeEmail.toLowerCase()
         const joeStats = stats[joeKey]
@@ -165,14 +161,10 @@ export default function Dashboard() {
           const joeWeeks = Object.entries(joeStats.weeklyStats)
             .sort((a, b) => Number(a[0]) - Number(b[0]))
             .map(([wk, ws]) => ({ week: Number(wk), total: ws.total, correct: ws.correct }))
-
           const sumCorrect = joeWeeks.reduce((s, w) => s + (w.correct || 0), 0)
           const sumTotal   = joeWeeks.reduce((s, w) => s + (w.total   || 0), 0)
-
           console.log('[DEBUG] Joe weeks:', joeWeeks)
           console.log('[DEBUG] Joe sums:', { sumTotal, sumCorrect, totalPoints: joeStats.totalPoints })
-        } else {
-          console.warn('[DEBUG] Joe not found in profiles/stats.')
         }
 
         // 8) Sort and set
@@ -193,9 +185,7 @@ export default function Dashboard() {
     loadLeaderboard()
   }, [])
 
-  // ====================================================================
-  // — Weekly Score Lookup — (unchanged)
-  // ====================================================================
+  // — Weekly Score Lookup —
   async function fetchWeeklyScore() {
     setWsError('')
     setWsResult(null)
@@ -217,9 +207,7 @@ export default function Dashboard() {
     }
   }
 
-  // ====================================================================
   // — Load & group league picks (robust to nested-join quirks/RLS)
-  // ====================================================================
   async function loadLeaguePicks() {
     setLpLoading(true)
     try {
@@ -297,9 +285,6 @@ export default function Dashboard() {
     }
   }
 
-  // ====================================================================
-  // UI
-  // ====================================================================
   return (
     <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
       <h1>League Dashboard</h1>
@@ -418,7 +403,7 @@ export default function Dashboard() {
               <tr>
                 <th>Username</th>
                 <th>Thursday Pick</th>
-                <th>Best-3 Picks</h3>
+                <th>Best-3 Picks</th>
                 <th>Monday Pick</th>
               </tr>
             </thead>
