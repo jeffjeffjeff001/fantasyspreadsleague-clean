@@ -49,20 +49,18 @@ export default function Dashboard() {
   const keyOf = (w, home, away) => `${w}|${normTeam(home)}|${normTeam(away)}`
 
   // ====================================================================
-  // Fetch & compute the leaderboard on mount (robust normalization)
+  // Fetch & compute the leaderboard on mount — NO nested join dependency
   // ====================================================================
   useEffect(() => {
     async function loadLeaderboard() {
       setLbLoading(true)
-
       try {
-        // 1) profiles (for usernames)
+        // 1) Profiles → username lookup
         const { data: profiles, error: profErr } = await supabase
           .from('profiles')
           .select('email,username')
         if (profErr) throw profErr
 
-        // username map by lower-cased email
         const usernameByEmail = {}
         ;(profiles || []).forEach(p => {
           if (p?.email) usernameByEmail[p.email.toLowerCase()] = p.username || p.email
@@ -79,23 +77,25 @@ export default function Dashboard() {
           resultsByKey[keyOf(r.week, r.home_team, r.away_team)] = r
         })
 
-        // 3) ALL picks with attached game info used for scoring
+        // 3) ALL games → map by id (avoid nested join)
+        const { data: games, error: gamesErr } = await supabase
+          .from('games')
+          .select('id, away_team, home_team, spread, week')
+        if (gamesErr) throw gamesErr
+
+        const gamesById = {}
+        ;(games || []).forEach(g => {
+          if (!g?.id) return
+          gamesById[String(g.id)] = g
+        })
+
+        // 4) ALL picks (no nested "games(...)")
         const { data: picks, error: pickErr } = await supabase
           .from('picks')
-          .select(`
-            user_email,
-            selected_team,
-            is_lock,
-            games (
-              away_team,
-              home_team,
-              spread,
-              week
-            )
-          `)
+          .select('user_email, selected_team, is_lock, game_id')
         if (pickErr) throw pickErr
 
-        // 4) init stats keyed by lower-cased email
+        // 5) Init stats keyed by lower-cased email
         const stats = {}
         ;(profiles || []).forEach(p => {
           if (!p?.email) return
@@ -108,10 +108,14 @@ export default function Dashboard() {
           }
         })
 
-        // 5) score every pick with normalized comparisons
+        // 6) Score every pick using game_id→gamesById
+        const missingGames = new Set()
         ;(picks || []).forEach(pick => {
-          const g = pick.games
-          if (!g) return
+          const g = gamesById[String(pick.game_id)]
+          if (!g) {
+            missingGames.add(String(pick.game_id))
+            return
+          }
 
           const emailKey = (pick.user_email || '').toLowerCase()
           const u = stats[emailKey]
@@ -122,7 +126,7 @@ export default function Dashboard() {
           u.weeklyStats[week].total += 1
 
           const r = resultsByKey[keyOf(week, g.home_team, g.away_team)]
-          if (!r) return  // result not found → skip scoring
+          if (!r) return
 
           const spread = parseFloat(g.spread) || 0
           const homeCover = (r.home_score + spread) > r.away_score
@@ -140,7 +144,11 @@ export default function Dashboard() {
           }
         })
 
-        // 6) perfect-week bonus (+3 when all picks that week are correct)
+        if (missingGames.size) {
+          console.warn('[DEBUG] leaderboard: picks referencing unknown game_ids:', Array.from(missingGames))
+        }
+
+        // 7) perfect-week bonus (+3 when all picks that week are correct)
         Object.values(stats).forEach(u => {
           Object.values(u.weeklyStats).forEach(ws => {
             if (ws.total > 0 && ws.correct === ws.total) {
@@ -149,7 +157,7 @@ export default function Dashboard() {
           })
         })
 
-        // ---- DEBUG: dump Joe’s math (so we can compare 27 vs 29)
+        // ---- DEBUG: Joe
         const joeEmail = 'kemmejd@gmail.com'
         const joeKey   = joeEmail.toLowerCase()
         const joeStats = stats[joeKey]
@@ -161,35 +169,18 @@ export default function Dashboard() {
           const sumCorrect = joeWeeks.reduce((s, w) => s + (w.correct || 0), 0)
           const sumTotal   = joeWeeks.reduce((s, w) => s + (w.total   || 0), 0)
 
-          console.group('[DEBUG] Joe (from stats used by leaderboard)')
-          console.table(joeWeeks)
-          console.log('sumTotal:', sumTotal, 'sumCorrect:', sumCorrect, 'totalPoints:', joeStats.totalPoints)
-          console.groupEnd()
+          console.log('[DEBUG] Joe weeks:', joeWeeks)
+          console.log('[DEBUG] Joe sums:', { sumTotal, sumCorrect, totalPoints: joeStats.totalPoints })
         } else {
-          console.warn('[DEBUG] Joe not found in profiles/stats; his picks may not be counted.')
+          console.warn('[DEBUG] Joe not found in profiles/stats.')
         }
 
-        // 7) sort and set
+        // 8) Sort and set
         const list = Object.values(stats)
         list.sort((a, b) => {
           if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints
           return b.totalCorrect - a.totalCorrect
         })
-
-        // Also log the final row the table will render for Joe
-        if (joeStats) {
-          const joeRow = list.find(r =>
-            (r.username || '').toLowerCase() === (joeStats.username || '').toLowerCase()
-          )
-          if (joeRow) {
-            console.log('[DEBUG] Leaderboard row for Joe:', {
-              username: joeRow.username,
-              totalCorrect: joeRow.totalCorrect,
-              totalPoints: joeRow.totalPoints
-            })
-          }
-        }
-
         setLeaderboard(list)
       } catch (err) {
         console.error('Leaderboard load error:', err)
@@ -427,7 +418,7 @@ export default function Dashboard() {
               <tr>
                 <th>Username</th>
                 <th>Thursday Pick</th>
-                <th>Best-3 Picks</th>
+                <th>Best-3 Picks</h3>
                 <th>Monday Pick</th>
               </tr>
             </thead>
