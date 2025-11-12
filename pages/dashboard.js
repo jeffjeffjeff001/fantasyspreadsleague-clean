@@ -36,137 +36,119 @@ export default function Dashboard() {
     ))
   }
 
-  // Fetch & compute the leaderboard on mount
+  // =============== ROBUST LEADERBOARD (no nested join) =================
   useEffect(() => {
     async function loadLeaderboard() {
       setLbLoading(true)
       try {
-        // 1) Profiles
+        // 1) profiles (email → username), normalized to lowercase
         const { data: profiles, error: profErr } = await supabase
           .from('profiles')
           .select('email,username')
         if (profErr) throw profErr
 
-        // Map email => user entry
-        const stats = {}
-        for (const p of profiles || []) {
-          stats[p.email] = {
-            username: p.username,
-            totalCorrect: 0,
-            totalPoints:  0,
-            // week -> { total, correct, points }
-            weekly: {}
-          }
-        }
+        const userMap = {}
+        ;(profiles || []).forEach(p => {
+          if (!p?.email) return
+          userMap[p.email.toLowerCase()] = p.username || p.email
+        })
 
-        // 2) Results (all weeks)
+        // 2) pull ALL games we’ve stored (id, teams, spread, week)
+        const { data: games, error: gamesErr } = await supabase
+          .from('games')
+          .select('id, home_team, away_team, spread, week')
+        if (gamesErr) throw gamesErr
+
+        const gamesById = Object.fromEntries(
+          (games || []).map(g => [String(g.id), g])
+        )
+
+        // 3) pull ALL results once
         const { data: results, error: resErr } = await supabase
           .from('results')
           .select('week, home_team, away_team, home_score, away_score')
         if (resErr) throw resErr
 
-        // quick lookup by week/home/away
-        const norm = (s) => (s ?? '').trim()
-        const resultKey = (w, h, a) => `${w}|${norm(h)}|${norm(a)}`
-        const resultMap = new Map()
-        for (const r of results || []) {
-          resultMap.set(resultKey(r.week, r.home_team, r.away_team), r)
-        }
+        // Fast lookups by "week|home|away"
+        const keyOf = (w, h, a) => `${w}|${(h||'').trim()}|${(a||'').trim()}`
+        const resultsByKey = {}
+        ;(results || []).forEach(r => {
+          resultsByKey[keyOf(r.week, r.home_team, r.away_team)] = r
+        })
 
-        // 3a) Authoritative weekly totals per user via explicit inner join
-        const { data: totalsRows, error: totalsErr } = await supabase
+        // 4) pull ALL picks (no nested join) → join in memory via game_id
+        const { data: picks, error: picksErr } = await supabase
           .from('picks')
-          .select('user_email, games!inner(week)')
-        if (totalsErr) throw totalsErr
+          .select('user_email, selected_team, is_lock, game_id')
+        if (picksErr) throw picksErr
 
-        const weeklyTotalByUserWeek = new Map() // `${email}|${week}` -> count
-        for (const row of totalsRows || []) {
-          const key = `${row.user_email}|${row.games.week}`
-          weeklyTotalByUserWeek.set(key, (weeklyTotalByUserWeek.get(key) || 0) + 1)
-        }
-
-        // 3b) All picks with their games (explicit inner join to avoid null games)
-        const { data: picks, error: pickErr } = await supabase
-          .from('picks')
-          .select(`
-            user_email,
-            selected_team,
-            is_lock,
-            games!inner (
-              week,
-              home_team,
-              away_team,
-              spread
-            )
-          `)
-        if (pickErr) throw pickErr
-
-        // Seed weekly objects with authoritative totals
-        for (const [emailWeek, cnt] of weeklyTotalByUserWeek.entries()) {
-          const [email, weekStr] = emailWeek.split('|')
-          const week = Number(weekStr)
-          if (!stats[email]) continue
-          if (!stats[email].weekly[week]) {
-            stats[email].weekly[week] = { total: 0, correct: 0, points: 0 }
+        // 5) init stats keyed by lowercase email
+        const stats = {}
+        const ensureUser = (emailLc) => {
+          if (!stats[emailLc]) {
+            stats[emailLc] = {
+              username: userMap[emailLc] || emailLc,
+              totalCorrect: 0,
+              totalPoints:  0,
+              weeklyStats:  {}  // week -> { total, correct }
+            }
           }
-          stats[email].weekly[week].total = cnt
+          return stats[emailLc]
         }
 
-        // 4) Score each pick
-        for (const pick of picks || []) {
-          const u = stats[pick.user_email]
-          const g = pick.games
-          if (!u || !g) continue
+        // 6) score every pick robustly
+        for (const pk of (picks || [])) {
+          const emailLc = (pk.user_email || '').toLowerCase()
+          if (!emailLc) continue
+          const u = ensureUser(emailLc)
+
+          const g = gamesById[String(pk.game_id)]
+          if (!g) continue  // guard against missing nested join rows
 
           const w = g.week
-          if (!u.weekly[w]) {
-            // no authoritative total (shouldn't happen, but guard)
-            u.weekly[w] = { total: 0, correct: 0, points: 0 }
-          }
+          if (!u.weeklyStats[w]) u.weeklyStats[w] = { total: 0, correct: 0 }
+          u.weeklyStats[w].total += 1
 
-          const r = resultMap.get(resultKey(w, g.home_team, g.away_team))
+          const r = resultsByKey[keyOf(g.week, g.home_team, g.away_team)]
           if (!r) continue
 
-          const spread = Number(g.spread)
+          const spread    = parseFloat(g.spread)
           const homeCover = (r.home_score + spread) > r.away_score
-          const winner = homeCover ? norm(r.home_team) : norm(r.away_team)
-          const picked = norm(pick.selected_team)
+          const winner    = homeCover ? (g.home_team || '').trim()
+                                      : (g.away_team || '').trim()
+
+          const picked = (pk.selected_team && pk.selected_team.trim)
+            ? pk.selected_team.trim()
+            : pk.selected_team
 
           if (picked === winner) {
             u.totalCorrect += 1
-            u.weekly[w].correct += 1
-            u.totalPoints += 1
-            u.weekly[w].points += 1
-            if (pick.is_lock) {
-              u.totalPoints += 2
-              u.weekly[w].points += 2
-            }
-          } else if (pick.is_lock) {
+            u.totalPoints  += 1
+            u.weeklyStats[w].correct += 1
+            if (pk.is_lock) u.totalPoints += 2
+          } else if (pk.is_lock) {
             u.totalPoints -= 2
-            u.weekly[w].points -= 2
           }
         }
 
-        // 5) Perfect-week bonus (+3 per week where correct === total and total>0)
-        for (const u of Object.values(stats)) {
-          for (const [w, ws] of Object.entries(u.weekly)) {
+        // 7) perfect-week bonus (+3 when user’s correct === total for that week)
+        Object.values(stats).forEach(u => {
+          Object.values(u.weeklyStats).forEach(ws => {
             if (ws.total > 0 && ws.correct === ws.total) {
               u.totalPoints += 3
-              ws.points += 3
             }
-          }
-        }
+          })
+        })
 
-        // 6) Sort by points desc, then correct desc
+        // 8) sort and store
         const list = Object.values(stats)
         list.sort((a, b) => {
           if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints
           return b.totalCorrect - a.totalCorrect
         })
-
         setLeaderboard(list)
-      } catch (e) {
-        console.error('loadLeaderboard error:', e)
+      } catch (err) {
+        console.error('loadLeaderboard error:', err)
         setLeaderboard([])
       } finally {
         setLbLoading(false)
@@ -184,7 +166,7 @@ export default function Dashboard() {
       const resp = await fetch(`/api/weekly-scores?week=${wsWeek}`)
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Error')
-      const me = json.find(r => r.email === wsEmail.trim())
+      const me = json.find(r => (r.email || '').toLowerCase() === wsEmail.trim().toLowerCase())
       if (!me) {
         setWsError('No picks found for that email & week.')
       } else {
@@ -201,10 +183,11 @@ export default function Dashboard() {
   async function loadLeaguePicks() {
     setLpLoading(true)
     try {
-      // 1) profiles for username lookup
-      const { data: profiles } = await supabase
+      // 1) profiles for username lookup (lowercased email keys)
+      const { data: profiles, error: profErr } = await supabase
         .from('profiles')
         .select('email,username')
+      if (profErr) throw profErr
 
       const userMap = {}
       ;(profiles || []).forEach(p => {
@@ -212,12 +195,13 @@ export default function Dashboard() {
         userMap[p.email.toLowerCase()] = p.username
       })
 
-      // 2) fetch the week's games first (ids + kickoff)
-      const { data: games } = await supabase
+      // 2) fetch the week's games first (ids + kickoff for day-bucketing)
+      const { data: games, error: gamesErr } = await supabase
         .from('games')
         .select('id, kickoff_time, week')
         .eq('week', lpWeek)
         .order('kickoff_time', { ascending: true })
+      if (gamesErr) throw gamesErr
 
       if (!games || games.length === 0) {
         setLpPicks([])
@@ -227,11 +211,12 @@ export default function Dashboard() {
       const gameIds = games.map(g => g.id)
       const gamesById = Object.fromEntries(games.map(g => [String(g.id), g]))
 
-      // 3) fetch picks via explicit IN on game_id (no nested filter)
-      const { data: picks } = await supabase
+      // 3) fetch picks via explicit IN on game_id
+      const { data: picks, error: picksErr } = await supabase
         .from('picks')
         .select('user_email, selected_team, is_lock, game_id')
         .in('game_id', gameIds)
+      if (picksErr) throw picksErr
 
       // 4) group by user (preserve lock to render bold)
       const grouped = {}
@@ -249,7 +234,7 @@ export default function Dashboard() {
           }
         }
 
-        const day  = new Date(g.kickoff_time).getDay() // 0=Sun,1=Mon,...,4=Thu
+        const day  = new Date(g.kickoff_time).getDay()  // 0=Sun,1=Mon,...,4=Thu
         const item = {
           team: (pk.selected_team && pk.selected_team.trim) ? pk.selected_team.trim() : pk.selected_team,
           isLock: !!pk.is_lock
