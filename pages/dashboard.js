@@ -38,16 +38,177 @@ export default function Dashboard() {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Normalization used for matching results<->games and picked team
-  const normTeam = (s) =>
+  // Canonicalization: collapse punctuation/spacing and map aliases → canonical
+  const strip = (s) =>
     (s || '')
+      .toUpperCase()
       .replace(/\u00A0/g, ' ')     // NBSP → space
-      .replace(/[^\w ]/g, '')      // strip punctuation (e.g., L.A. -> LA)
+      .replace(/[^\w ]/g, '')      // remove punctuation
       .replace(/\s+/g, ' ')        // collapse spaces
       .trim()
-      .toUpperCase()
 
-  const keyOf = (w, home, away) => `${w}|${normTeam(home)}|${normTeam(away)}`
+  // Build an alias key without spaces to match variants like "LA", "L.A.", etc.
+  const aliasKey = (s) => strip(s).replace(/\s/g, '')
+
+  // Alias map (covers city abbreviations, common nicknames, and TLA codes)
+  const ALIAS = new Map([
+    // NFC East
+    ['DALLASCOWBOYS', 'DALLAS COWBOYS'],
+    ['COWBOYS', 'DALLAS COWBOYS'],
+    ['DAL', 'DALLAS COWBOYS'],
+
+    ['NEWYORKGIANTS', 'NEW YORK GIANTS'],
+    ['NYGIANTS', 'NEW YORK GIANTS'],
+    ['GIANTS', 'NEW YORK GIANTS'],
+    ['NYG', 'NEW YORK GIANTS'],
+
+    ['PHILADELPHIAEAGLES', 'PHILADELPHIA EAGLES'],
+    ['EAGLES', 'PHILADELPHIA EAGLES'],
+    ['PHI', 'PHILADELPHIA EAGLES'],
+
+    ['WASHINGTONCOMMANDERS', 'WASHINGTON COMMANDERS'],
+    ['WASHINGTON', 'WASHINGTON COMMANDERS'],
+    ['COMMANDERS', 'WASHINGTON COMMANDERS'],
+    ['WAS', 'WASHINGTON COMMANDERS'],
+
+    // NFC North
+    ['CHICAGOBEARS', 'CHICAGO BEARS'],
+    ['BEARS', 'CHICAGO BEARS'],
+    ['CHI', 'CHICAGO BEARS'],
+
+    ['DETROITLIONS', 'DETROIT LIONS'],
+    ['LIONS', 'DETROIT LIONS'],
+    ['DET', 'DETROIT LIONS'],
+
+    ['GREENBAYPACKERS', 'GREEN BAY PACKERS'],
+    ['PACKERS', 'GREEN BAY PACKERS'],
+    ['GB', 'GREEN BAY PACKERS'],
+    ['GBP', 'GREEN BAY PACKERS'],
+
+    ['MINNESOTAVIKINGS', 'MINNESOTA VIKINGS'],
+    ['VIKINGS', 'MINNESOTA VIKINGS'],
+    ['MIN', 'MINNESOTA VIKINGS'],
+
+    // NFC South
+    ['ATLANTAFALCONS', 'ATLANTA FALCONS'],
+    ['FALCONS', 'ATLANTA FALCONS'],
+    ['ATL', 'ATLANTA FALCONS'],
+
+    ['CAROLINAPANTHERS', 'CAROLINA PANTHERS'],
+    ['PANTHERS', 'CAROLINA PANTHERS'],
+    ['CAR', 'CAROLINA PANTHERS'],
+
+    ['NEWORLEANSSAINTS', 'NEW ORLEANS SAINTS'],
+    ['SAINTS', 'NEW ORLEANS SAINTS'],
+    ['NO', 'NEW ORLEANS SAINTS'],
+    ['NOS', 'NEW ORLEANS SAINTS'],
+
+    ['TAMPABAYBUCCANEERS', 'TAMPA BAY BUCCANEERS'],
+    ['BUCCANEERS', 'TAMPA BAY BUCCANEERS'],
+    ['BUCS', 'TAMPA BAY BUCCANEERS'],
+    ['TB', 'TAMPA BAY BUCCANEERS'],
+
+    // NFC West
+    ['ARIZONACARDINALS', 'ARIZONA CARDINALS'],
+    ['CARDINALS', 'ARIZONA CARDINALS'],
+    ['ARI', 'ARIZONA CARDINALS'],
+
+    ['LOSANGELESRAMS', 'LOS ANGELES RAMS'],
+    ['LARAMS', 'LOS ANGELES RAMS'],
+    ['RAMS', 'LOS ANGELES RAMS'],
+    ['LAR', 'LOS ANGELES RAMS'],
+
+    ['SANFRANCISCO49ERS', 'SAN FRANCISCO 49ERS'],
+    ['49ERS', 'SAN FRANCISCO 49ERS'],
+    ['SF', 'SAN FRANCISCO 49ERS'],
+    ['SFO', 'SAN FRANCISCO 49ERS'],
+
+    ['SEATTLESEAHAWKS', 'SEATTLE SEAHAWKS'],
+    ['SEAHAWKS', 'SEATTLE SEAHAWKS'],
+    ['SEA', 'SEATTLE SEAHAWKS'],
+
+    // AFC East
+    ['BUFFALOBILLS', 'BUFFALO BILLS'],
+    ['BILLS', 'BUFFALO BILLS'],
+    ['BUF', 'BUFFALO BILLS'],
+
+    ['MIAMIDOLPHINS', 'MIAMI DOLPHINS'],
+    ['DOLPHINS', 'MIAMI DOLPHINS'],
+    ['MIA', 'MIAMI DOLPHINS'],
+
+    ['NEWENGLANDPATRIOTS', 'NEW ENGLAND PATRIOTS'],
+    ['PATRIOTS', 'NEW ENGLAND PATRIOTS'],
+    ['NE', 'NEW ENGLAND PATRIOTS'],
+    ['NEP', 'NEW ENGLAND PATRIOTS'],
+
+    ['NEWYORKJETS', 'NEW YORK JETS'],
+    ['NYJETS', 'NEW YORK JETS'],
+    ['JETS', 'NEW YORK JETS'],
+    ['NYJ', 'NEW YORK JETS'],
+
+    // AFC North
+    ['BALTIMORERAVENS', 'BALTIMORE RAVENS'],
+    ['RAVENS', 'BALTIMORE RAVENS'],
+    ['BAL', 'BALTIMORE RAVENS'],
+
+    ['CINCINNATIBENGALS', 'CINCINNATI BENGALS'],
+    ['BENGALS', 'CINCINNATI BENGALS'],
+    ['CIN', 'CINCINNATI BENGALS'],
+
+    ['CLEVELANDBROWNS', 'CLEVELAND BROWNS'],
+    ['BROWNS', 'CLEVELAND BROWNS'],
+    ['CLE', 'CLEVELAND BROWNS'],
+
+    ['PITTSBURGHSTEELERS', 'PITTSBURGH STEELERS'],
+    ['STEELERS', 'PITTSBURGH STEELERS'],
+    ['PIT', 'PITTSBURGH STEELERS'],
+
+    // AFC South
+    ['HOUSTONTEXANS', 'HOUSTON TEXANS'],
+    ['TEXANS', 'HOUSTON TEXANS'],
+    ['HOU', 'HOUSTON TEXANS'],
+
+    ['INDIANAPOLISCOLTS', 'INDIANAPOLIS COLTS'],
+    ['COLTS', 'INDIANAPOLIS COLTS'],
+    ['IND', 'INDIANAPOLIS COLTS'],
+
+    ['JACKSONVILLEJAGUARS', 'JACKSONVILLE JAGUARS'],
+    ['JAGUARS', 'JACKSONVILLE JAGUARS'],
+    ['JAGS', 'JACKSONVILLE JAGUARS'],
+    ['JAX', 'JACKSONVILLE JAGUARS'],
+
+    ['TENNESSEETITANS', 'TENNESSEE TITANS'],
+    ['TITANS', 'TENNESSEE TITANS'],
+    ['TEN', 'TENNESSEE TITANS'],
+
+    // AFC West
+    ['DENVERBRONCOS', 'DENVER BRONCOS'],
+    ['BRONCOS', 'DENVER BRONCOS'],
+    ['DEN', 'DENVER BRONCOS'],
+
+    ['KANSASCITYCHIEFS', 'KANSAS CITY CHIEFS'],
+    ['CHIEFS', 'KANSAS CITY CHIEFS'],
+    ['KC', 'KANSAS CITY CHIEFS'],
+    ['KCC', 'KANSAS CITY CHIEFS'],
+
+    ['LASVEGASRAIDERS', 'LAS VEGAS RAIDERS'],
+    ['LVRAIDERS', 'LAS VEGAS RAIDERS'],
+    ['RAIDERS', 'LAS VEGAS RAIDERS'],
+    ['LV', 'LAS VEGAS RAIDERS'],
+
+    ['LOSANGELESCHARGERS', 'LOS ANGELES CHARGERS'],
+    ['LACHARGERS', 'LOS ANGELES CHARGERS'],
+    ['CHARGERS', 'LOS ANGELES CHARGERS'],
+    ['LA', 'LOS ANGELES CHARGERS'], // safe here because we disambiguate by nickname elsewhere
+    ['LAC', 'LOS ANGELES CHARGERS'],
+  ])
+
+  const canonTeam = (s) => {
+    const k = aliasKey(s)
+    return ALIAS.get(k) || strip(s) // fall back to stripped name if unknown alias
+  }
+
+  const keyOf = (w, home, away) => `${w}|${canonTeam(home)}|${canonTeam(away)}`
 
   // ====================================================================
   // Fetch & compute the leaderboard on mount
@@ -68,24 +229,18 @@ export default function Dashboard() {
           if (p?.email) usernameByEmail[p.email.toLowerCase()] = p.username || p.email
         })
 
-        // 2) fetch ALL results and build a normalized lookup
+        // 2) fetch ALL results and build a normalized lookup (both orientations)
         const { data: results, error: resErr } = await supabase
           .from('results')
           .select('away_team,home_team,away_score,home_score,week')
         if (resErr) throw resErr
 
-        // Build map with BOTH orientations:
-        // - aligned:  (week|home|away) -> { r, swapped:false }
-        // - swapped:  (week|away|home) -> { r, swapped:true }
         const resultsByKey = {}
         ;(results || []).forEach(r => {
           const kAligned = keyOf(r.week, r.home_team, r.away_team)
           const kSwapped = keyOf(r.week, r.away_team, r.home_team)
           resultsByKey[kAligned] = { r, swapped: false }
-          // Only set swapped key if not already set (don’t overwrite)
-          if (!resultsByKey[kSwapped]) {
-            resultsByKey[kSwapped] = { r, swapped: true }
-          }
+          if (!resultsByKey[kSwapped]) resultsByKey[kSwapped] = { r, swapped: true }
         })
 
         // 3) fetch ALL picks with the GAMES fields needed for scoring
@@ -117,7 +272,7 @@ export default function Dashboard() {
           }
         })
 
-        // 5) score every pick with aligned-or-swapped result matching
+        // 5) score every pick with aligned-or-swapped result matching + canonical names
         ;(picks || []).forEach(pick => {
           const g = pick.games
           if (!g) return
@@ -141,9 +296,9 @@ export default function Dashboard() {
 
           const spread = parseFloat(g.spread) || 0
           const homeCover = (homeScore + spread) > awayScore
-          const winner = homeCover ? normTeam(g.home_team) : normTeam(g.away_team)
+          const winner = homeCover ? canonTeam(g.home_team) : canonTeam(g.away_team)
 
-          const picked = normTeam(pick.selected_team)
+          const picked = canonTeam(pick.selected_team)
 
           if (picked === winner) {
             u.totalCorrect += 1
@@ -186,7 +341,7 @@ export default function Dashboard() {
   }, [])
 
   // ====================================================================
-  // — Weekly Score Lookup —
+  // — Weekly Score Lookup — (unchanged)
   // ====================================================================
   async function fetchWeeklyScore() {
     setWsError('')
