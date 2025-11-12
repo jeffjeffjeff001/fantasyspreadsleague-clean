@@ -21,8 +21,11 @@ export default function Dashboard() {
   const [lpPicks,    setLpPicks]    = useState([])
   const [lpLoading,  setLpLoading]  = useState(false)
 
-  // Render helpers (unchanged)
-  const renderPick = (p) => (!p || !p.team) ? '' : (p.isLock ? <strong>{p.team}</strong> : p.team)
+  // Render helpers for league picks (bold lock picks)
+  const renderPick = (p) => {
+    if (!p || !p.team) return ''
+    return p.isLock ? <strong>{p.team}</strong> : p.team
+  }
   const renderBestList = (arr = []) => {
     const upto = arr.slice(0, 3)
     return upto.map((p, idx) => (
@@ -33,17 +36,19 @@ export default function Dashboard() {
     ))
   }
 
-  // -------- normalization helpers (used for result/pick matching) -------
-  const normalizeTeam = (s) =>
+  // ---------- normalization helpers ----------
+  const normTeam = (s) =>
     (s || '')
-      .replace(/\u00A0/g, ' ')
+      .replace(/\u00A0/g, ' ')  // NBSP → space
       .replace(/\s+/g, ' ')
       .trim()
       .toUpperCase()
 
-  const resultKey = (w, home, away) => `${w}|${normalizeTeam(home)}|${normalizeTeam(away)}`
+  const resKey = (w, home, away) => `${w}|${normTeam(home)}|${normTeam(away)}`
+  const pickKey = (email, w, home, away) =>
+    `${(email || '').toLowerCase()}|${w}|${normTeam(home)}|${normTeam(away)}`
 
-  // ======================= LEADERBOARD =======================
+  // ====================== Leaderboard (fixed) ======================
   useEffect(() => {
     async function loadLeaderboard() {
       setLbLoading(true)
@@ -54,12 +59,12 @@ export default function Dashboard() {
           .select('email,username')
         if (profErr) throw profErr
 
-        const usernameByEmail = {}
+        const nameByEmail = {}
         ;(profiles || []).forEach(p => {
-          if (p?.email) usernameByEmail[p.email.toLowerCase()] = p.username || p.email
+          if (p?.email) nameByEmail[p.email.toLowerCase()] = p.username || p.email
         })
 
-        // 2) results -> normalized lookup
+        // 2) results → normalized lookup
         const { data: results, error: resErr } = await supabase
           .from('results')
           .select('away_team,home_team,away_score,home_score,week')
@@ -67,10 +72,10 @@ export default function Dashboard() {
 
         const resultsByKey = {}
         ;(results || []).forEach(r => {
-          resultsByKey[resultKey(r.week, r.home_team, r.away_team)] = r
+          resultsByKey[resKey(r.week, r.home_team, r.away_team)] = r
         })
 
-        // 3) picks with game_id + created_at so we can de-dupe
+        // 3) picks with nested games fields (no game_id dependency)
         const { data: picksRaw, error: pickErr } = await supabase
           .from('picks')
           .select(`
@@ -79,72 +84,71 @@ export default function Dashboard() {
             user_email,
             selected_team,
             is_lock,
-            game_id,
             games (
-              away_team,
+              week,
               home_team,
-              spread,
-              week
+              away_team,
+              spread
             )
           `)
         if (pickErr) throw pickErr
 
-        // 3a) DE-DUPE: keep only the latest pick for (user_email, game_id)
-        const latestByUserGame = {}
+        // 3a) DE-DUPE: keep latest per (email, week, home, away)
+        const latest = {}
         for (const p of (picksRaw || [])) {
-          if (!p?.game_id || !p?.user_email) continue
-          const k = `${p.user_email.toLowerCase()}|${p.game_id}`
-          const cur = latestByUserGame[k]
+          if (!p?.games) continue
+          const g = p.games
+          const k = pickKey(p.user_email, g.week, g.home_team, g.away_team)
+          const cur = latest[k]
           if (!cur) {
-            latestByUserGame[k] = p
+            latest[k] = p
           } else {
-            // prefer newest created_at; fallback to highest id
             const curTs = cur.created_at ? Date.parse(cur.created_at) : 0
             const pTs   = p.created_at   ? Date.parse(p.created_at)   : 0
             if (pTs > curTs || (!cur.created_at && p.id > cur.id)) {
-              latestByUserGame[k] = p
+              latest[k] = p
             }
           }
         }
-        const picks = Object.values(latestByUserGame)
+        const picks = Object.values(latest)
 
-        // 4) init stats keyed by lowercased email
+        // 4) initialize stats for all known users; also allow users
+        //     who don't exist in profiles but have picks.
         const stats = {}
-        ;(profiles || []).forEach(p => {
-          if (!p?.email) return
-          const k = p.email.toLowerCase()
-          stats[k] = {
-            username:     usernameByEmail[k] || p.email,
-            totalCorrect: 0,
-            totalPoints:  0,
-            weeklyStats:  {} // week -> { total, correct }
+        const ensureUser = (email) => {
+          const k = (email || '').toLowerCase()
+          if (!k) return null
+          if (!stats[k]) {
+            stats[k] = {
+              username: nameByEmail[k] || email,
+              totalCorrect: 0,
+              totalPoints:  0,
+              weeklyStats:  {}  // week -> { total, correct }
+            }
           }
-        })
+          return stats[k]
+        }
+        ;(profiles || []).forEach(p => ensureUser(p.email))
 
-        // 5) score each (de-duped) pick
-        for (const pick of picks) {
-          const g = pick.games
-          if (!g) continue
-
-          const emailKey = (pick.user_email || '').toLowerCase()
-          const u = stats[emailKey]
-          if (!u) continue
+        // 5) score
+        for (const p of picks) {
+          const g = p.games
+          const u = ensureUser(p.user_email)
+          if (!g || !u) continue
 
           const week = g.week
           if (!u.weeklyStats[week]) u.weeklyStats[week] = { total: 0, correct: 0 }
           u.weeklyStats[week].total += 1
 
-          const r = resultsByKey[resultKey(week, g.home_team, g.away_team)]
+          const r = resultsByKey[resKey(week, g.home_team, g.away_team)]
           if (!r) continue
 
           const spread = parseFloat(g.spread) || 0
           const homeCover = (r.home_score + spread) > r.away_score
-          const winner = homeCover
-            ? normalizeTeam(g.home_team)
-            : normalizeTeam(g.away_team)
+          const winner = homeCover ? normTeam(g.home_team) : normTeam(g.away_team)
 
-          const picked = normalizeTeam(pick.selected_team)
-          const isLock = !!pick.is_lock
+          const picked = normTeam(p.selected_team)
+          const isLock = !!p.is_lock
 
           if (picked === winner) {
             u.totalCorrect += 1
@@ -156,7 +160,7 @@ export default function Dashboard() {
           }
         }
 
-        // 6) perfect-week bonus (+3) — only when user had picks that week
+        // 6) perfect-week bonus (+3) if user got every pick right that week
         Object.values(stats).forEach(u => {
           Object.values(u.weeklyStats).forEach(ws => {
             if (ws.total > 0 && ws.correct === ws.total) {
@@ -165,16 +169,15 @@ export default function Dashboard() {
           })
         })
 
-        // 7) sort
+        // 7) sort & set
         const list = Object.values(stats)
         list.sort((a, b) => {
           if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints
           return b.totalCorrect - a.totalCorrect
         })
-
         setLeaderboard(list)
-      } catch (e) {
-        console.error('Leaderboard load error:', e)
+      } catch (err) {
+        console.error('loadLeaderboard error:', err)
         setLeaderboard([])
       } finally {
         setLbLoading(false)
@@ -183,7 +186,7 @@ export default function Dashboard() {
     loadLeaderboard()
   }, [])
 
-  // ======================= WEEKLY SCORE LOOKUP (unchanged) =======================
+  // ====================== Weekly Score Lookup (unchanged) ======================
   async function fetchWeeklyScore() {
     setWsError('')
     setWsResult(null)
@@ -202,7 +205,7 @@ export default function Dashboard() {
     }
   }
 
-  // ======================= LEAGUE PICKS (unchanged from your robust version) =======================
+  // ====================== League Picks (your robust version) ======================
   async function loadLeaguePicks() {
     setLpLoading(true)
     try {
@@ -238,6 +241,7 @@ export default function Dashboard() {
       ;(picks || []).forEach(pk => {
         const g = gamesById[String(pk.game_id)]
         if (!g) return
+
         const email = (pk.user_email || '').toLowerCase()
         if (!grouped[email]) {
           grouped[email] = {
@@ -247,8 +251,10 @@ export default function Dashboard() {
             monday:   null
           }
         }
-        const day  = new Date(g.kickoff_time).getDay()
+
+        const day  = new Date(g.kickoff_time).getDay() // 0=Sun,1=Mon,...,4=Thu
         const item = { team: (pk.selected_team || '').trim(), isLock: !!pk.is_lock }
+
         if (day === 4)      grouped[email].thursday = item
         else if (day === 1) grouped[email].monday   = item
         else                grouped[email].best.push(item)
@@ -264,13 +270,14 @@ export default function Dashboard() {
       const list = Object.values(grouped).sort((a, b) =>
         (a.username || '').localeCompare(b.username || '')
       )
+
       setLpPicks(list)
     } finally {
       setLpLoading(false)
     }
   }
 
-  // ======================= UI (unchanged) =======================
+  // ====================== UI ======================
   return (
     <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
       <h1>League Dashboard</h1>
@@ -281,11 +288,18 @@ export default function Dashboard() {
         <h2>Weekly Score</h2>
         <label>
           Email:{' '}
-          <input type="email" value={wsEmail} onChange={e => setWsEmail(e.target.value)} />
+          <input
+            type="email"
+            value={wsEmail}
+            onChange={e => setWsEmail(e.target.value)}
+          />
         </label>{' '}
         <label>
           Week:{' '}
-          <select value={wsWeek} onChange={e => setWsWeek(parseInt(e.target.value,10))}>
+          <select
+            value={wsWeek}
+            onChange={e => setWsWeek(parseInt(e.target.value,10))}
+          >
             {Array.from({ length: 18 }, (_, i) => i + 1).map(wk => (
               <option key={wk} value={wk}>{wk}</option>
             ))}
@@ -356,13 +370,20 @@ export default function Dashboard() {
         <div style={{ marginBottom: 12 }}>
           <label>
             Week:&nbsp;
-            <select value={lpWeek} onChange={e => setLpWeek(parseInt(e.target.value, 10))}>
+            <select
+              value={lpWeek}
+              onChange={e => setLpWeek(parseInt(e.target.value, 10))}
+            >
               {Array.from({ length: 18 }, (_, i) => i + 1).map(wk => (
                 <option key={wk} value={wk}>{wk}</option>
               ))}
             </select>
           </label>
-          <button onClick={loadLeaguePicks} disabled={lpLoading} style={{ marginLeft: 8 }}>
+          <button
+            onClick={loadLeaguePicks}
+            disabled={lpLoading}
+            style={{ marginLeft: 8 }}
+          >
             {lpLoading ? 'Loading…' : 'Load Picks'}
           </button>
         </div>
