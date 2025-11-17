@@ -1,13 +1,14 @@
 // pages/dashboard.js
+
 import { useState, useEffect } from 'react'
 import Link from '../components/LegacyLink'
 import { supabase } from '../lib/supabaseClient'
 
 // ===== DEBUG SWITCHES =====
-const DEBUG_LEADERBOARD = true;                        
-const DEBUG_USER_EMAIL  = 'kemmejd@gmail.com';         
-const APPLY_OVERRIDES   = true;                        
-const LOG_MISMATCH_KEYS = true;                      
+const DEBUG_LEADERBOARD = true;                        // turn logs on/off
+const DEBUG_USER_EMAIL  = 'kemmejd@gmail.com';         // who to trace
+const APPLY_OVERRIDES   = true;                        // flip false to ignore overrides
+const LOG_MISMATCH_KEYS = true;                        // show key mismatches when a result isn’t found
 // ==========================
 
 export default function Dashboard() {
@@ -53,17 +54,16 @@ export default function Dashboard() {
       .toUpperCase()
 
   const keyOf = (w, home, away) => `${w}|${normalizeTeam(home)}|${normalizeTeam(away)}`
+  const debugKey = (w, home, away) => `${w} | ${normalizeTeam(home)} | ${normalizeTeam(away)}`
 
   // ====================================================================
-  // Fetch & compute the leaderboard (fixed: only count games with results)
+  // Fetch & compute the leaderboard on mount (RESTORED logic + overrides)
   // ====================================================================
   useEffect(() => {
     async function loadLeaderboard() {
-      const DEBUG = false; // set true to see per-user weeklyStats logged
       setLbLoading(true)
-
       try {
-        // 1) profiles (usernames)
+        // 1) profiles (for usernames; we key stats by lowercased email)
         const { data: profiles, error: profErr } = await supabase
           .from('profiles')
           .select('email,username')
@@ -74,7 +74,7 @@ export default function Dashboard() {
           if (p?.email) usernameByEmail[p.email.toLowerCase()] = p.username || p.email
         })
 
-        // 2) all results → lookup
+        // 2) ALL results across all weeks, build normalized lookup
         const { data: results, error: resErr } = await supabase
           .from('results')
           .select('away_team,home_team,away_score,home_score,week')
@@ -85,7 +85,7 @@ export default function Dashboard() {
           resultsByKey[keyOf(r.week, r.home_team, r.away_team)] = r
         })
 
-        // 3) all picks (with joined game info)
+        // 3) ALL picks with games fields across all weeks
         const { data: picks, error: pickErr } = await supabase
           .from('picks')
           .select(`
@@ -101,38 +101,60 @@ export default function Dashboard() {
           `)
         if (pickErr) throw pickErr
 
-        // 4) init aggregates
+        // 4) init stats keyed by lowercased email
         const stats = {}
         ;(profiles || []).forEach(p => {
-          const k = (p.email || '').toLowerCase()
+          if (!p?.email) return
+          const k = p.email.toLowerCase()
           stats[k] = {
-            username: usernameByEmail[k] || p.email || k,
+            username:     usernameByEmail[k] || p.email,
             totalCorrect: 0,
             totalPoints:  0,
-            weeklyStats:  {} // week -> { total, correct }
+            weeklyStats:  {}   // week -> { total, correct }
           }
         })
 
-        // 5) score picks — only count weeks for games that have a result
-        ;(picks || []).forEach(pick => {
+        // 5) score every pick (with DEBUG)
+        let missingResults = 0
+        const missingSamples = []   // small cap to avoid spam
+
+        ;(picks || []).forEach((pick) => {
           const g = pick.games
           if (!g) return
 
-          const k = (pick.user_email || '').toLowerCase()
-          const u = stats[k]
+          const emailKey = (pick.user_email || '').toLowerCase()
+          const u = stats[emailKey]
           if (!u) return
 
           const week = g.week
-          const r = resultsByKey[keyOf(week, g.home_team, g.away_team)]
-          if (!r) return // ignore future/unscored games entirely
-
           if (!u.weeklyStats[week]) u.weeklyStats[week] = { total: 0, correct: 0 }
+
+          const k = keyOf(week, g.home_team, g.away_team)
+          const r = resultsByKey[k]
+
+          // If no result → skip counting; capture debug
+          if (!r) {
+            missingResults += 1
+            if (LOG_MISMATCH_KEYS && missingSamples.length < 10) {
+              missingSamples.push({
+                email: pick.user_email,
+                week: g.week,
+                home: g.home_team,
+                away: g.away_team,
+                keyExpected: debugKey(g.week, g.home_team, g.away_team),
+                note: 'No result found for key',
+              })
+            }
+            return
+          }
+
+          // Only count if a resolved result exists
           u.weeklyStats[week].total += 1
 
-          const spread = Number(g.spread) || 0
+          const spread    = parseFloat(g.spread) || 0
           const homeCover = (r.home_score + spread) > r.away_score
-          const winner = normalizeTeam(homeCover ? g.home_team : g.away_team)
-          const picked = normalizeTeam(pick.selected_team)
+          const winner    = homeCover ? normalizeTeam(g.home_team) : normalizeTeam(g.away_team)
+          const picked    = normalizeTeam(pick.selected_team)
 
           if (picked === winner) {
             u.totalCorrect += 1
@@ -144,7 +166,7 @@ export default function Dashboard() {
           }
         })
 
-        // 6) perfect-week bonus (+3) — weeks exist only for scored games
+        // 6) perfect-week bonus (+3) if correct==total in that week
         Object.values(stats).forEach(u => {
           Object.values(u.weeklyStats).forEach(ws => {
             if (ws.total > 0 && ws.correct === ws.total) {
@@ -153,15 +175,58 @@ export default function Dashboard() {
           })
         })
 
-        if (DEBUG) {
-          const sample = Object.entries(stats).slice(0, 3).map(([k, v]) => ({
-            user: v.username, weeks: v.weeklyStats
-          }))
-          console.debug('[LB DEBUG] weeklyStats samples:', sample)
+        // 7) APPLY MANUAL OVERRIDES (leaderboard_overrides)
+        let ovByEmail = {}
+        if (APPLY_OVERRIDES) {
+          const { data: overrides, error: ovErr } = await supabase
+            .from('leaderboard_overrides')
+            .select('email, points_delta, correct_delta')
+          if (ovErr) throw ovErr
+
+          ;(overrides || []).forEach(row => {
+            if (!row?.email) return
+            ovByEmail[row.email.toLowerCase()] = {
+              points: Number(row.points_delta || 0),
+              correct: Number(row.correct_delta || 0),
+            }
+          })
+
+          Object.entries(stats).forEach(([emailKey, u]) => {
+            const bump = ovByEmail[emailKey]
+            if (!bump) return
+            u.totalPoints  += bump.points
+            u.totalCorrect += bump.correct
+          })
         }
 
-        // 7) sort + set
-        const list = Object.values(stats).sort((a, b) => {
+        // === DEBUG DUMPS ===
+        if (DEBUG_LEADERBOARD) {
+          console.log('[DEBUG] leaderboard: missingResults count =', missingResults)
+          if (missingSamples.length) console.table(missingSamples)
+
+          const dbgKey = (DEBUG_USER_EMAIL || '').toLowerCase()
+          const dbg = stats[dbgKey]
+          if (dbg) {
+            const weeksArr = Object.entries(dbg.weeklyStats)
+              .map(([w, ws]) => ({ week: Number(w), total: ws.total, correct: ws.correct }))
+              .sort((a, b) => a.week - b.week)
+
+            const sumTotal   = weeksArr.reduce((s, r) => s + r.total, 0)
+            const sumCorrect = weeksArr.reduce((s, r) => s + r.correct, 0)
+
+            console.log('[DEBUG] User weeks ->', weeksArr)
+            console.log('[DEBUG] sums ->', { sumTotal, sumCorrect, totalPoints: dbg.totalPoints })
+
+            const bump = ovByEmail[dbgKey] || { points: 0, correct: 0 }
+            console.log('[DEBUG] overrides applied ->', bump)
+          } else {
+            console.log('[DEBUG] no stats for', DEBUG_USER_EMAIL)
+          }
+        }
+
+        // 8) sort & set
+        const list = Object.values(stats)
+        list.sort((a, b) => {
           if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints
           return b.totalCorrect - a.totalCorrect
         })
@@ -178,7 +243,7 @@ export default function Dashboard() {
   }, [])
 
   // ====================================================================
-  // — Weekly Score Lookup — (unchanged)
+  // — Weekly Score Lookup —
   // ====================================================================
   async function fetchWeeklyScore() {
     setWsError('')
@@ -202,15 +267,17 @@ export default function Dashboard() {
   }
 
   // ====================================================================
-  // — Load & group league picks (robust, uses explicit IN on game_id)
+  // — Load & group league picks (robust to nested-join quirks/RLS) —
   // ====================================================================
   async function loadLeaguePicks() {
     setLpLoading(true)
     try {
       // 1) profiles for username lookup
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profErr } = await supabase
         .from('profiles')
         .select('email,username')
+      if (profErr) throw profErr
+
       const userMap = {}
       ;(profiles || []).forEach(p => {
         if (!p?.email) return
@@ -218,11 +285,12 @@ export default function Dashboard() {
       })
 
       // 2) fetch the week's games first (ids + kickoff for day-bucketing)
-      const { data: games } = await supabase
+      const { data: games, error: gamesErr } = await supabase
         .from('games')
         .select('id, kickoff_time, week')
         .eq('week', lpWeek)
         .order('kickoff_time', { ascending: true })
+      if (gamesErr) throw gamesErr
 
       if (!games || games.length === 0) {
         setLpPicks([])
@@ -232,17 +300,18 @@ export default function Dashboard() {
       const gameIds = games.map(g => g.id)
       const gamesById = Object.fromEntries(games.map(g => [String(g.id), g]))
 
-      // 3) fetch picks via explicit IN on game_id (avoid nested filter quirks)
-      const { data: picks } = await supabase
+      // 3) fetch picks via explicit IN on game_id (no nested filter)
+      const { data: picks, error: picksErr } = await supabase
         .from('picks')
         .select('user_email, selected_team, is_lock, game_id')
         .in('game_id', gameIds)
+      if (picksErr) throw picksErr
 
       // 4) group by user (preserve lock to render bold)
       const grouped = {}
-      ;(picks || []).forEach(pk => {
+      for (const pk of (picks || [])) {
         const g = gamesById[String(pk.game_id)]
-        if (!g) return
+        if (!g) continue
 
         const email = (pk.user_email || '').toLowerCase()
         if (!grouped[email]) {
@@ -260,7 +329,7 @@ export default function Dashboard() {
         if (day === 4)      grouped[email].thursday = item
         else if (day === 1) grouped[email].monday   = item
         else                grouped[email].best.push(item)
-      })
+      }
 
       // Ensure every league member appears (even with no picks)
       ;(profiles || []).forEach(p => {
@@ -276,6 +345,9 @@ export default function Dashboard() {
       )
 
       setLpPicks(list)
+    } catch (err) {
+      console.error('loadLeaguePicks error:', err)
+      setLpPicks([])
     } finally {
       setLpLoading(false)
     }
