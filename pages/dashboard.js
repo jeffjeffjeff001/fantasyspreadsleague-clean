@@ -45,19 +45,21 @@ export default function Dashboard() {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Normalization used for matching results<->games and for picked team
-  const normalizeTeam = (s) =>
+  // Ultra-robust normalization for matching names across CSV imports
+  // Example: "Los Angeles Chargers" → "LOSANGELESCHARGERS"
+  const normalizeTeamStrict = (s) =>
     (s || '')
-      .replace(/\u00A0/g, ' ')   // NBSP → space
-      .replace(/\s+/g, ' ')      // collapse spaces
+      .replace(/\u00A0/g, ' ')     // NBSP → space
+      .replace(/\s+/g, ' ')        // collapse spaces
       .trim()
       .toUpperCase()
+      .replace(/[^A-Z]/g, '')      // keep letters only; drop punctuation/symbols/spaces
 
-  const keyOf = (w, home, away) => `${w}|${normalizeTeam(home)}|${normalizeTeam(away)}`
-  const debugKey = (w, home, away) => `${w} | ${normalizeTeam(home)} | ${normalizeTeam(away)}`
+  const keyOf = (w, home, away) => `${w}|${normalizeTeamStrict(home)}|${normalizeTeamStrict(away)}`
+  const debugKey = (w, home, away) => `${w} | ${normalizeTeamStrict(home)} | ${normalizeTeamStrict(away)}`
 
   // ====================================================================
-  // Fetch & compute the leaderboard on mount (RESTORED logic + overrides)
+  // Fetch & compute the leaderboard on mount (logic + overrides + debug)
   // ====================================================================
   useEffect(() => {
     async function loadLeaderboard() {
@@ -74,16 +76,21 @@ export default function Dashboard() {
           if (p?.email) usernameByEmail[p.email.toLowerCase()] = p.username || p.email
         })
 
-        // 2) ALL results across all weeks, build normalized lookup
+        // 2) ALL results, but only rows that are *resolved* (scores present)
         const { data: results, error: resErr } = await supabase
           .from('results')
           .select('away_team,home_team,away_score,home_score,week')
         if (resErr) throw resErr
 
+        const resolvedResults = (results || []).filter(r =>
+          Number.isFinite(r?.home_score) && Number.isFinite(r?.away_score)
+        )
+
+        // Build fast lookup by (week|HOME|AWAY) using strict normalization
         const resultsByKey = {}
-        ;(results || []).forEach(r => {
+        for (const r of resolvedResults) {
           resultsByKey[keyOf(r.week, r.home_team, r.away_team)] = r
-        })
+        }
 
         // 3) ALL picks with games fields across all weeks
         const { data: picks, error: pickErr } = await supabase
@@ -114,9 +121,9 @@ export default function Dashboard() {
           }
         })
 
-        // 5) score every pick (with DEBUG)
+        // 5) score every pick with strict normalized keys
         let missingResults = 0
-        const missingSamples = []   // small cap to avoid spam
+        const missingSamples = []   // small cap to avoid spam (10)
 
         ;(picks || []).forEach((pick) => {
           const g = pick.games
@@ -127,8 +134,6 @@ export default function Dashboard() {
           if (!u) return
 
           const week = g.week
-          if (!u.weeklyStats[week]) u.weeklyStats[week] = { total: 0, correct: 0 }
-
           const k = keyOf(week, g.home_team, g.away_team)
           const r = resultsByKey[k]
 
@@ -142,19 +147,20 @@ export default function Dashboard() {
                 home: g.home_team,
                 away: g.away_team,
                 keyExpected: debugKey(g.week, g.home_team, g.away_team),
-                note: 'No result found for key',
+                note: 'No resolved result found for normalized key',
               })
             }
             return
           }
 
-          // Only count if a resolved result exists
+          // Count only when a resolved result exists
+          if (!u.weeklyStats[week]) u.weeklyStats[week] = { total: 0, correct: 0 }
           u.weeklyStats[week].total += 1
 
           const spread    = parseFloat(g.spread) || 0
           const homeCover = (r.home_score + spread) > r.away_score
-          const winner    = homeCover ? normalizeTeam(g.home_team) : normalizeTeam(g.away_team)
-          const picked    = normalizeTeam(pick.selected_team)
+          const winner    = homeCover ? normalizeTeamStrict(g.home_team) : normalizeTeamStrict(g.away_team)
+          const picked    = normalizeTeamStrict(pick.selected_team)
 
           if (picked === winner) {
             u.totalCorrect += 1
