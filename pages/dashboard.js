@@ -3,6 +3,13 @@ import { useState, useEffect } from 'react'
 import Link from '../components/LegacyLink'
 import { supabase } from '../lib/supabaseClient'
 
+// ===== DEBUG SWITCHES =====
+const DEBUG_LEADERBOARD = true;                        
+const DEBUG_USER_EMAIL  = 'kemmejd@gmail.com';         
+const APPLY_OVERRIDES   = true;                        
+const LOG_MISMATCH_KEYS = true;                      
+// ==========================
+
 export default function Dashboard() {
   // — Weekly Score state —
   const [wsEmail,    setWsEmail]    = useState('')
