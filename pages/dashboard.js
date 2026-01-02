@@ -232,15 +232,17 @@ export default function Dashboard() {
     if (!p || !p.team) return ''
     return p.isLock ? <strong>{p.team}</strong> : p.team
   }
-  const renderBestList = (arr = []) => {
-    const upto = arr.slice(0, 3)
-    return upto.map((p, idx) => (
-      <span key={idx}>
-        {renderPick(p)}
-        {idx < upto.length - 1 ? ', ' : null}
-      </span>
-    ))
-  }
+ const renderBestList = (arr = []) => {
+  const maxBest = (lpWeek === 18) ? 5 : 3
+  const upto = arr.slice(0, maxBest)
+
+  return upto.map((p, idx) => (
+    <span key={idx}>
+      {renderPick(p)}
+      {idx < upto.length - 1 ? ', ' : null}
+    </span>
+  ))
+}
 
   // ================================================================
   // UI
