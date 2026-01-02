@@ -59,18 +59,20 @@ export default function UserProfile() {
       // use local getDay() so Thursday/Monday match user TZ
       const getDow = iso => new Date(iso).getDay()
       const thu = [], mon = [], best = []
+      const isWeek18 = (selectedWeek === 18)
+      const maxBest = isWeek18 ? 5 : 3
 
-      // bucket into Thursday, Monday, Best‑3
-      valid.forEach(pick => {
-        const dow = getDow(pick.games.kickoff_time)
-        if (dow === 4 && thu.length < 1) {
-          thu.push(pick)
-        } else if (dow === 1 && mon.length < 1) {
-          mon.push(pick)
-        } else if (dow !== 1 && dow !== 4 && best.length < 3) {
-          best.push(pick)
-        }
-      })
+  valid.forEach(pick => {
+       const dow = getDow(pick.games.kickoff_time)
+
+    if (!isWeek18 && dow === 4 && thu.length < 1) {
+      thu.push(pick)
+    } else if (!isWeek18 && dow === 1 && mon.length < 1) {
+    mon.push(pick)
+    } else {
+    if (best.length < maxBest) best.push(pick)
+  }
+})
 
       // only allow first lock pick
       let lockFound = false
@@ -83,10 +85,13 @@ export default function UserProfile() {
       })
 
       // warn if we dropped any extras
-      if (filtered.length < valid.length) {
-        setWarning('⚠️ Showing max of 1 Thursday, 1 Monday & 3 Best-Choice picks.')
-      }
-
+    if (filtered.length < valid.length) {
+  setWarning(
+    isWeek18
+      ? '⚠️ Showing max of 5 Best-Choice picks for Week 18.'
+      : '⚠️ Showing max of 1 Thursday, 1 Monday & 3 Best-Choice picks.'
+  )
+}
       setPicks(filtered)
     }
 
