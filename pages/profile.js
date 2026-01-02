@@ -19,7 +19,7 @@ export default function UserProfile() {
     return (
       <div style={{ padding: 20 }}>
         <p>
-          <Link href="/join-league"><a>Join the league to view your profile</a></Link>
+          <Link href="/join‑league"><a>Join the league to view your profile</a></Link>
         </p>
       </div>
     )
@@ -53,14 +53,14 @@ export default function UserProfile() {
     if (error) {
       setError(error.message)
     } else {
-      // drop any pick whose joined game is null
+      // **DROP any pick whose joined game is null**
       const valid = data.filter(p => p.games && p.games.kickoff_time)
 
       // use local getDay() so Thursday/Monday match user TZ
       const getDow = iso => new Date(iso).getDay()
       const thu = [], mon = [], best = []
 
-      // bucket into Thursday, Monday, Best-3
+      // bucket into Thursday, Monday, Best‑3
       valid.forEach(pick => {
         const dow = getDow(pick.games.kickoff_time)
         if (dow === 4 && thu.length < 1) {
@@ -82,6 +82,7 @@ export default function UserProfile() {
         return { ...pick, is_lock: false }
       })
 
+      // warn if we dropped any extras
       if (filtered.length < valid.length) {
         setWarning('⚠️ Showing max of 1 Thursday, 1 Monday & 3 Best-Choice picks.')
       }
@@ -113,6 +114,7 @@ export default function UserProfile() {
             ))}
           </select>
         </label>
+        {/* ← REPLACED THE INVALID BUTTON */}
         <button
           onClick={loadPicks}
           disabled={loading}
