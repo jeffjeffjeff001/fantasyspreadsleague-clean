@@ -3,40 +3,131 @@
 import { useState, useEffect } from 'react'
 import Link from '../components/LegacyLink'
 import { supabase } from '../lib/supabaseClient'
+import { fetchCurrentWeek } from '../lib/currentWeek'
 
 export default function Admin() {
   // ── ALL HOOK DECLARATIONS ─────────────────────────────────────────────
-  const ADMIN_PW = process.env.NEXT_PUBLIC_ADMIN_PASSWORD
-  const [enteredPw, setEnteredPw]     = useState('')
-  const [authorized, setAuthorized]   = useState(false)
+  const ADMIN_PW =
+    process.env.NEXT_PUBLIC_ADMIN_PASSWORD
 
-  const [selectedWeek, setSelectedWeek]       = useState(1)
-  const [games, setGames]                     = useState([])
-  const [profiles, setProfiles]               = useState([])
-  const [loadingGames, setLoadingGames]       = useState(false)
-  const [loadingProfiles, setLoadingProfiles] = useState(false)
+  const [enteredPw, setEnteredPw] =
+    useState('')
 
-  const [newGameAway, setNewGameAway]       = useState('')
-  const [newGameHome, setNewGameHome]       = useState('')
-  const [newGameSpread, setNewGameSpread]   = useState('')
-  const [newGameKickoff, setNewGameKickoff] = useState('')
+  const [authorized, setAuthorized] =
+    useState(false)
 
-  const [userForPicks, setUserForPicks]   = useState('')
-  const [weekForPicks, setWeekForPicks]   = useState(1)
-  const [userPicks, setUserPicks]         = useState([])
-  const [loadingPicks, setLoadingPicks]   = useState(false)
+  const [selectedWeek, setSelectedWeek] =
+    useState(1)
 
-  const [weeklyScores, setWeeklyScores]   = useState([])   // shown in existing table
-  const [loadingScores, setLoadingScores] = useState(false)
+  const [weekReady, setWeekReady] =
+    useState(false)
+
+  const [weekError, setWeekError] =
+    useState('')
+
+  const [games, setGames] =
+    useState([])
+
+  const [profiles, setProfiles] =
+    useState([])
+
+  const [loadingGames, setLoadingGames] =
+    useState(false)
+
+  const [
+    loadingProfiles,
+    setLoadingProfiles,
+  ] = useState(false)
+
+  const [newGameAway, setNewGameAway] =
+    useState('')
+
+  const [newGameHome, setNewGameHome] =
+    useState('')
+
+  const [
+    newGameSpread,
+    setNewGameSpread,
+  ] = useState('')
+
+  const [
+    newGameKickoff,
+    setNewGameKickoff,
+  ] = useState('')
+
+  const [userForPicks, setUserForPicks] =
+    useState('')
+
+  const [weekForPicks, setWeekForPicks] =
+    useState(1)
+
+  const [userPicks, setUserPicks] =
+    useState([])
+
+  const [loadingPicks, setLoadingPicks] =
+    useState(false)
+
+  const [weeklyScores, setWeeklyScores] =
+    useState([])
+
+  const [
+    loadingScores,
+    setLoadingScores,
+  ] = useState(false)
+
+  // Determine the current week and use it for both
+  // Game Management and View User Picks.
+  useEffect(() => {
+    let cancelled = false
+
+    async function initializeWeek() {
+      try {
+        const currentWeek =
+          await fetchCurrentWeek(supabase)
+
+        if (!cancelled) {
+          setSelectedWeek(currentWeek)
+          setWeekForPicks(currentWeek)
+        }
+      } catch (error) {
+        console.error(
+          'Unable to determine current week:',
+          error
+        )
+
+        if (!cancelled) {
+          setWeekError(
+            'The current week could not be determined automatically. Week 1 has been selected.'
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setWeekReady(true)
+        }
+      }
+    }
+
+    initializeWeek()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
+    if (!weekReady) return
+
     loadGames()
+  }, [selectedWeek, weekReady])
+
+  useEffect(() => {
     loadProfiles()
-  }, [selectedWeek])
+  }, [])
 
   // ── ADMIN PASSWORD GATE ────────────────────────────────────────────────
-  const handlePwSubmit = e => {
-    e.preventDefault()
+  const handlePwSubmit = event => {
+    event.preventDefault()
+
     if (enteredPw === ADMIN_PW) {
       setAuthorized(true)
     } else {
@@ -49,66 +140,139 @@ export default function Admin() {
     return (
       <div style={{ padding: 20 }}>
         <h1>Admin Login</h1>
+
         <form onSubmit={handlePwSubmit}>
           <label>
             Enter admin password:
             <input
               type="password"
               value={enteredPw}
-              onChange={e => setEnteredPw(e.target.value)}
+              onChange={event =>
+                setEnteredPw(
+                  event.target.value
+                )
+              }
               style={{ marginLeft: 8 }}
             />
           </label>
-          <button type="submit" style={{ marginLeft: 12 }}>
+
+          <button
+            type="submit"
+            style={{ marginLeft: 12 }}
+          >
             Unlock
           </button>
         </form>
       </div>
     )
   }
-  // ── END PASSWORD GATE ───────────────────────────────────────────────────
 
-  // ── Data loading ──────────────────────────────────────────────────
+  // ── Data loading ──────────────────────────────────────────────────────
   async function loadGames() {
     setLoadingGames(true)
+
     const { data, error } = await supabase
       .from('games')
       .select('*')
       .eq('week', selectedWeek)
-      .order('kickoff_time', { ascending: true })
+      .order('kickoff_time', {
+        ascending: true,
+      })
+
     if (error) {
-      alert('Error loading games: ' + error.message)
+      alert(
+        'Error loading games: ' +
+          error.message
+      )
+      setGames([])
     } else {
-      setGames(data)
+      setGames(data || [])
     }
+
     setLoadingGames(false)
   }
 
   async function loadProfiles() {
     setLoadingProfiles(true)
+
     const { data, error } = await supabase
       .from('profiles')
-      .select('email, username, first_name, last_name')
-      .order('username', { ascending: true })
+      .select(
+        'email,username,first_name,last_name'
+      )
+      .order('username', {
+        ascending: true,
+      })
+
     if (error) {
-      alert('Error loading profiles: ' + error.message)
+      alert(
+        'Error loading profiles: ' +
+          error.message
+      )
+      setProfiles([])
     } else {
-      setProfiles(data)
+      setProfiles(data || [])
     }
+
     setLoadingProfiles(false)
   }
 
-  // ── Game management ────────────────────────────────────────────────
+  // ── Game management ───────────────────────────────────────────────────
   async function handleAddGame() {
-    const { error } = await supabase.from('games').insert([{
-      week:         selectedWeek,
-      away_team:    newGameAway,
-      home_team:    newGameHome,
-      spread:       parseFloat(newGameSpread),
-      kickoff_time: new Date(newGameKickoff).toISOString(),
-    }])
+    const spread = parseFloat(
+      newGameSpread
+    )
+
+    const kickoff = new Date(
+      newGameKickoff
+    )
+
+    if (
+      !newGameAway.trim() ||
+      !newGameHome.trim()
+    ) {
+      alert(
+        'Please enter both the away team and home team.'
+      )
+      return
+    }
+
+    if (Number.isNaN(spread)) {
+      alert(
+        'Please enter a valid spread.'
+      )
+      return
+    }
+
+    if (
+      Number.isNaN(kickoff.getTime())
+    ) {
+      alert(
+        'Please enter a valid kickoff date and time.'
+      )
+      return
+    }
+
+    const { error } = await supabase
+      .from('games')
+      .insert([
+        {
+          week: selectedWeek,
+          away_team:
+            newGameAway.trim(),
+          home_team:
+            newGameHome.trim(),
+          spread,
+          kickoff_time:
+            kickoff.toISOString(),
+        },
+      ])
+
     if (error) {
-      alert('Error adding game: ' + error.message)
+      alert(
+        'Error adding game: ' +
+          error.message
+      )
     } else {
       setNewGameAway('')
       setNewGameHome('')
@@ -119,134 +283,274 @@ export default function Admin() {
   }
 
   async function handleDeleteGame(id) {
-    if (!confirm('Delete this game and all its picks?')) return
-
-    const { error: pickErr } = await supabase
-      .from('picks')
-      .delete()
-      .eq('game_id', id)
-    if (pickErr) {
-      alert('Error deleting associated picks: ' + pickErr.message)
+    if (
+      !confirm(
+        'Delete this game and all its picks?'
+      )
+    ) {
       return
     }
 
-    const { error: gameErr } = await supabase
+    const {
+      error: picksError,
+    } = await supabase
+      .from('picks')
+      .delete()
+      .eq('game_id', id)
+
+    if (picksError) {
+      alert(
+        'Error deleting associated picks: ' +
+          picksError.message
+      )
+      return
+    }
+
+    const {
+      error: gameError,
+    } = await supabase
       .from('games')
       .delete()
       .eq('id', id)
-    if (gameErr) {
-      alert('Error deleting game: ' + gameErr.message)
+
+    if (gameError) {
+      alert(
+        'Error deleting game: ' +
+          gameError.message
+      )
     } else {
       loadGames()
     }
   }
 
   async function handleClearWeek() {
-    if (!confirm(`Clear all games and picks for Week ${selectedWeek}?`)) return
-
-    const { error: pickErr } = await supabase
-      .from('picks')
-      .delete()
-      .eq('games.week', selectedWeek)
-    if (pickErr) {
-      alert('Error clearing picks: ' + pickErr.message)
+    if (
+      !confirm(
+        `Clear all games and picks for Week ${selectedWeek}?`
+      )
+    ) {
       return
     }
 
-    const { error: gameErr } = await supabase
+    const {
+      data: weekGames,
+      error: gameLookupError,
+    } = await supabase
+      .from('games')
+      .select('id')
+      .eq('week', selectedWeek)
+
+    if (gameLookupError) {
+      alert(
+        'Error locating week games: ' +
+          gameLookupError.message
+      )
+      return
+    }
+
+    const gameIds = (weekGames || []).map(
+      game => game.id
+    )
+
+    if (gameIds.length > 0) {
+      const {
+        error: picksError,
+      } = await supabase
+        .from('picks')
+        .delete()
+        .in('game_id', gameIds)
+
+      if (picksError) {
+        alert(
+          'Error clearing picks: ' +
+            picksError.message
+        )
+        return
+      }
+    }
+
+    const {
+      error: gamesError,
+    } = await supabase
       .from('games')
       .delete()
       .eq('week', selectedWeek)
-    if (gameErr) {
-      alert('Error clearing games: ' + gameErr.message)
+
+    if (gamesError) {
+      alert(
+        'Error clearing games: ' +
+          gamesError.message
+      )
     } else {
       setGames([])
     }
   }
 
-  // ── User management ────────────────────────────────────────────────
+  // ── User management ───────────────────────────────────────────────────
   async function handleDeleteUser(email) {
-    if (!confirm(`Delete user ${email}?`)) return
-    const res = await fetch('/api/delete-profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    })
-    const { error } = await res.json()
-    if (error) alert('Error deleting user: ' + error)
-    else loadProfiles()
+    if (
+      !confirm(`Delete user ${email}?`)
+    ) {
+      return
+    }
+
+    const response = await fetch(
+      '/api/delete-profile',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':
+            'application/json',
+        },
+        body: JSON.stringify({ email }),
+      }
+    )
+
+    const result = await response.json()
+
+    if (result.error) {
+      alert(
+        'Error deleting user: ' +
+          result.error
+      )
+    } else {
+      loadProfiles()
+    }
   }
 
-  // ── View user picks ────────────────────────────────────────────────
+  // ── View user picks ───────────────────────────────────────────────────
   async function loadUserPicks() {
     if (!userForPicks) {
       alert('Please select a user')
       return
     }
+
     setLoadingPicks(true)
 
     const { data, error } = await supabase
       .from('picks')
-      .select('id, selected_team, is_lock, games(away_team,home_team,kickoff_time)')
+      .select(`
+        id,
+        selected_team,
+        is_lock,
+        games (
+          away_team,
+          home_team,
+          kickoff_time,
+          week
+        )
+      `)
       .eq('user_email', userForPicks)
       .eq('games.week', weekForPicks)
-      .order('kickoff_time', { foreignTable: 'games', ascending: true })
+      .order('kickoff_time', {
+        foreignTable: 'games',
+        ascending: true,
+      })
 
     if (error) {
-      alert('Error loading picks: ' + error.message)
+      alert(
+        'Error loading picks: ' +
+          error.message
+      )
+      setUserPicks([])
       setLoadingPicks(false)
       return
     }
 
-    const valid = data.filter(pk => pk.games && pk.games.kickoff_time)
+    const valid = (data || []).filter(
+      pick =>
+        pick.games &&
+        pick.games.kickoff_time
+    )
+
     setUserPicks(valid)
     setLoadingPicks(false)
   }
 
   async function handleDeletePick(pickId) {
-    if (!confirm('Delete this pick?')) return
+    if (!confirm('Delete this pick?')) {
+      return
+    }
+
     const { error } = await supabase
       .from('picks')
       .delete()
       .eq('id', pickId)
-    if (error) alert('Error deleting pick: ' + error.message)
-    else loadUserPicks()
+
+    if (error) {
+      alert(
+        'Error deleting pick: ' +
+          error.message
+      )
+    } else {
+      loadUserPicks()
+    }
   }
 
-  // ── Calculate Weekly Scores (bullet-proof weeklyTotal) ─────────────
+  // ── Calculate Weekly Scores ───────────────────────────────────────────
   async function calculateScores() {
     setLoadingScores(true)
+
     try {
-      // 1) profiles
-      const { data: profileRows, error: profErr } = await supabase
+      const {
+        data: profileRows,
+        error: profileError,
+      } = await supabase
         .from('profiles')
         .select('email,username')
-      if (profErr) throw profErr
 
-      // 2) results for selectedWeek
-      const { data: results, error: resErr } = await supabase
-        .from('results')
-        .select('home_team, away_team, home_score, away_score, week')
-        .eq('week', selectedWeek)
-      if (resErr) throw resErr
-
-      // helper to normalize strings
-      const norm = (s) => (s ?? '').trim()
-
-      // 3) reliable weekly totals using an explicit inner join + group by
-      const { data: totals, error: totalsErr } = await supabase
-        .from('picks')
-        .select('user_email, games!inner(week)')
-        .eq('games.week', selectedWeek)
-      if (totalsErr) throw totalsErr
-
-      const weeklyTotalByUser = {}
-      for (const r of totals || []) {
-        weeklyTotalByUser[r.user_email] = (weeklyTotalByUser[r.user_email] || 0) + 1
+      if (profileError) {
+        throw profileError
       }
 
-      // 4) all picks for this week with games via explicit inner join
-      const { data: picks, error: pickErr } = await supabase
+      const {
+        data: results,
+        error: resultsError,
+      } = await supabase
+        .from('results')
+        .select(
+          'home_team,away_team,home_score,away_score,week'
+        )
+        .eq('week', selectedWeek)
+
+      if (resultsError) {
+        throw resultsError
+      }
+
+      const normalize = value =>
+        (value ?? '').trim()
+
+      const {
+        data: totals,
+        error: totalsError,
+      } = await supabase
+        .from('picks')
+        .select(
+          'user_email,games!inner(week)'
+        )
+        .eq('games.week', selectedWeek)
+
+      if (totalsError) {
+        throw totalsError
+      }
+
+      const weeklyTotalByUser = {}
+
+      for (const row of totals || []) {
+        weeklyTotalByUser[
+          row.user_email
+        ] =
+          (
+            weeklyTotalByUser[
+              row.user_email
+            ] || 0
+          ) + 1
+      }
+
+      const {
+        data: picks,
+        error: picksError,
+      } = await supabase
         .from('picks')
         .select(`
           user_email,
@@ -260,70 +564,136 @@ export default function Admin() {
           )
         `)
         .eq('games.week', selectedWeek)
-      if (pickErr) throw pickErr
 
-      // 5) seed per-user stats with authoritative weeklyTotal
+      if (picksError) {
+        throw picksError
+      }
+
       const stats = {}
-      profileRows.forEach(p => {
-        stats[p.email] = {
-          email:         p.email,
-          weeklyPoints:  0,
-          correct:       0,
-          lockCorrect:   0,
+
+      profileRows.forEach(profile => {
+        stats[profile.email] = {
+          email: profile.email,
+          weeklyPoints: 0,
+          correct: 0,
+          lockCorrect: 0,
           lockIncorrect: 0,
-          perfectBonus:  0,
-          weeklyTotal:   weeklyTotalByUser[p.email] || 0,
+          perfectBonus: 0,
+          weeklyTotal:
+            weeklyTotalByUser[
+              profile.email
+            ] || 0,
         }
       })
 
-      // 6) score picks
       for (const pick of picks || []) {
-        const g = pick.games
-        if (!g) continue
-        const u = stats[pick.user_email]
-        if (!u) continue
+        const game = pick.games
 
-        const result = results.find(r =>
-          r.week === g.week &&
-          norm(r.home_team) === norm(g.home_team) &&
-          norm(r.away_team) === norm(g.away_team)
+        if (!game) continue
+
+        const user =
+          stats[pick.user_email]
+
+        if (!user) continue
+
+        const result = results.find(
+          row =>
+            row.week === game.week &&
+            normalize(row.home_team) ===
+              normalize(
+                game.home_team
+              ) &&
+            normalize(row.away_team) ===
+              normalize(
+                game.away_team
+              )
         )
+
         if (!result) continue
 
-        const spread    = Number(g.spread)
-        const homeCover = (result.home_score + spread) > result.away_score
-        const winner    = homeCover ? norm(result.home_team) : norm(result.away_team)
+        const spread = Number(
+          game.spread
+        )
 
-        const picked = norm(pick.selected_team)
-        if (picked === winner) {
-          u.correct += 1
-          u.weeklyPoints += 1
+        const adjustedHomeScore =
+          Number(result.home_score) +
+          spread
+
+        const awayScore = Number(
+          result.away_score
+        )
+
+        // Pushes are not counted as correct
+        // for either side.
+        if (
+          adjustedHomeScore === awayScore
+        ) {
           if (pick.is_lock) {
-            u.lockCorrect += 1
-            u.weeklyPoints += 2
+            user.lockIncorrect += 1
+            user.weeklyPoints -= 2
+          }
+
+          continue
+        }
+
+        const homeCover =
+          adjustedHomeScore > awayScore
+
+        const winner = homeCover
+          ? normalize(result.home_team)
+          : normalize(result.away_team)
+
+        const picked = normalize(
+          pick.selected_team
+        )
+
+        if (picked === winner) {
+          user.correct += 1
+          user.weeklyPoints += 1
+
+          if (pick.is_lock) {
+            user.lockCorrect += 1
+            user.weeklyPoints += 2
           }
         } else if (pick.is_lock) {
-          u.lockIncorrect += 1
-          u.weeklyPoints -= 2
+          user.lockIncorrect += 1
+          user.weeklyPoints -= 2
         }
       }
 
-      // 7) perfect-week bonus (+3 if correct === weeklyTotal)
-      for (const u of Object.values(stats)) {
-        if (u.weeklyTotal > 0 && u.correct === u.weeklyTotal) {
-          u.perfectBonus = 3
-          u.weeklyPoints += 3
+      for (
+        const user of Object.values(stats)
+      ) {
+        if (
+          user.weeklyTotal > 0 &&
+          user.correct ===
+            user.weeklyTotal
+        ) {
+          user.perfectBonus = 3
+          user.weeklyPoints += 3
         }
       }
 
-      // 8) only users who made picks this week; sort by points then correct
-      const arr = Object.values(stats).filter(u => u.weeklyTotal > 0)
-      arr.sort((a, b) => (b.weeklyPoints - a.weeklyPoints) || (b.correct - a.correct))
+      const rows = Object.values(stats)
+        .filter(
+          user => user.weeklyTotal > 0
+        )
+        .sort(
+          (a, b) =>
+            b.weeklyPoints -
+              a.weeklyPoints ||
+            b.correct - a.correct
+        )
 
-      setWeeklyScores(arr)
-    } catch (err) {
-      console.error(err)
-      alert('Error calculating scores: ' + err.message)
+      setWeeklyScores(rows)
+    } catch (error) {
+      console.error(error)
+
+      alert(
+        'Error calculating scores: ' +
+          error.message
+      )
+
       setWeeklyScores([])
     } finally {
       setLoadingScores(false)
@@ -333,121 +703,402 @@ export default function Admin() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Admin</h1>
-      <p><Link href="/"><a>← Home</a></Link></p>
+
+      <p>
+        <Link href="/">
+          <a>← Home</a>
+        </Link>
+      </p>
+
+      {weekError && (
+        <p style={{ color: '#a67c00' }}>
+          ⚠️ {weekError}
+        </p>
+      )}
 
       {/* Game Management */}
       <section style={{ marginTop: 20 }}>
-        <h2>Game Management (Week {selectedWeek})</h2>
+        <h2>
+          Game Management (Week{' '}
+          {selectedWeek})
+        </h2>
+
         <div style={{ marginBottom: 12 }}>
-          <label>Week:&nbsp;
+          <label>
+            Week:&nbsp;
             <select
               value={selectedWeek}
-              onChange={e => setSelectedWeek(parseInt(e.target.value,10))}
+              onChange={event =>
+                setSelectedWeek(
+                  parseInt(
+                    event.target.value,
+                    10
+                  )
+                )
+              }
+              disabled={!weekReady}
               style={{ width: 60 }}
             >
-              {Array.from({ length: 18 }, (_, i) => i + 1).map(wk => (
-                <option key={wk} value={wk}>{wk}</option>
+              {Array.from(
+                { length: 18 },
+                (_, index) => index + 1
+              ).map(week => (
+                <option
+                  key={week}
+                  value={week}
+                >
+                  {week}
+                </option>
               ))}
             </select>
           </label>
-          <button onClick={handleClearWeek} style={{ marginLeft: 12 }}>
+
+          <button
+            onClick={handleClearWeek}
+            disabled={!weekReady}
+            style={{ marginLeft: 12 }}
+          >
             Clear Week
           </button>
+
+          {weekReady && (
+            <small
+              style={{
+                marginLeft: 10,
+                color: '#64748b',
+              }}
+            >
+              Automatically opens to the current week.
+            </small>
+          )}
         </div>
-        {loadingGames ? (
-          <p>Loading games…</p>
+
+        {!weekReady || loadingGames ? (
+          <p>
+            Loading Week {selectedWeek} games…
+          </p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+            }}
+          >
             <thead>
               <tr>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Away</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Home</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Spread</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Kickoff</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Actions</th>
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Away
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Home
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Spread
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Kickoff
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Actions
+                </th>
               </tr>
             </thead>
+
             <tbody>
-              {games.map(g => (
-                <tr key={g.id}>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>{g.away_team}</td>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>{g.home_team}</td>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>
-                    {g.spread > 0 ? `+${g.spread}` : g.spread}
+              {games.map(game => (
+                <tr key={game.id}>
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {game.away_team}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>
-                    {new Date(g.kickoff_time).toLocaleString()}
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {game.home_team}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {game.spread > 0
+                      ? `+${game.spread}`
+                      : game.spread}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {new Date(
+                      game.kickoff_time
+                    ).toLocaleString()}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                      textAlign: 'center',
+                    }}
+                  >
                     <button
-                      onClick={() => handleDeleteGame(g.id)}
-                      style={{ background: 'red', color: 'white', padding: '6px 12px', border: 'none' }}
+                      onClick={() =>
+                        handleDeleteGame(
+                          game.id
+                        )
+                      }
+                      style={{
+                        background: 'red',
+                        color: 'white',
+                        padding: '6px 12px',
+                        border: 'none',
+                      }}
                     >
                       Delete
                     </button>
                   </td>
                 </tr>
               ))}
+
+              {games.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    style={{
+                      padding: 8,
+                      textAlign: 'center',
+                    }}
+                  >
+                    No games found for Week{' '}
+                    {selectedWeek}.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}
+
         <div style={{ marginTop: 12 }}>
           <input
             placeholder="Away Team"
             value={newGameAway}
-            onChange={e => setNewGameAway(e.target.value)}
+            onChange={event =>
+              setNewGameAway(
+                event.target.value
+              )
+            }
             style={{ marginRight: 8 }}
           />
+
           <input
             placeholder="Home Team"
             value={newGameHome}
-            onChange={e => setNewGameHome(e.target.value)}
+            onChange={event =>
+              setNewGameHome(
+                event.target.value
+              )
+            }
             style={{ marginRight: 8 }}
           />
+
           <input
             placeholder="Spread"
             type="number"
             value={newGameSpread}
-            onChange={e => setNewGameSpread(e.target.value)}
-            style={{ width: 80, marginRight: 8 }}
+            onChange={event =>
+              setNewGameSpread(
+                event.target.value
+              )
+            }
+            style={{
+              width: 80,
+              marginRight: 8,
+            }}
           />
+
           <input
             placeholder="Kickoff (ISO)"
             value={newGameKickoff}
-            onChange={e => setNewGameKickoff(e.target.value)}
+            onChange={event =>
+              setNewGameKickoff(
+                event.target.value
+              )
+            }
             style={{ marginRight: 8 }}
           />
-          <button onClick={handleAddGame}>Add Game</button>
+
+          <button
+            onClick={handleAddGame}
+            disabled={!weekReady}
+          >
+            Add Game
+          </button>
         </div>
       </section>
 
       {/* User Management */}
       <section style={{ marginTop: 40 }}>
         <h2>User Management</h2>
+
         {loadingProfiles ? (
           <p>Loading profiles…</p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+            }}
+          >
             <thead>
               <tr>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Username</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Name</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Email</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Actions</th>
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Username
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Name
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Email
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Actions
+                </th>
               </tr>
             </thead>
+
             <tbody>
-              {profiles.map(p => (
-                <tr key={p.email}>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>{p.username}</td>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>
-                    {p.first_name} {p.last_name}
+              {profiles.map(profile => (
+                <tr key={profile.email}>
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {profile.username}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>{p.email}</td>
-                  <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {profile.first_name}{' '}
+                    {profile.last_name}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {profile.email}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                      textAlign: 'center',
+                    }}
+                  >
                     <button
-                      onClick={() => handleDeleteUser(p.email)}
-                      style={{ background: 'red', color: 'white', padding: '6px 12px', border: 'none' }}
+                      onClick={() =>
+                        handleDeleteUser(
+                          profile.email
+                        )
+                      }
+                      style={{
+                        background: 'red',
+                        color: 'white',
+                        padding: '6px 12px',
+                        border: 'none',
+                      }}
                     >
                       Delete
                     </button>
@@ -462,67 +1113,207 @@ export default function Admin() {
       {/* View User Picks */}
       <section style={{ marginTop: 40 }}>
         <h2>View User Picks</h2>
+
         <div style={{ marginBottom: 12 }}>
           <select
             value={userForPicks}
-            onChange={e => setUserForPicks(e.target.value)}
+            onChange={event =>
+              setUserForPicks(
+                event.target.value
+              )
+            }
           >
-            <option value="">Select user</option>
-            {profiles.map(p => (
-              <option key={p.email} value={p.email}>{p.username}</option>
+            <option value="">
+              Select user
+            </option>
+
+            {profiles.map(profile => (
+              <option
+                key={profile.email}
+                value={profile.email}
+              >
+                {profile.username}
+              </option>
             ))}
           </select>
 
           <select
             value={weekForPicks}
-            onChange={e => setWeekForPicks(parseInt(e.target.value, 10))}
-            style={{ width: 60, marginLeft: 8 }}
+            onChange={event =>
+              setWeekForPicks(
+                parseInt(
+                  event.target.value,
+                  10
+                )
+              )
+            }
+            disabled={!weekReady}
+            style={{
+              width: 60,
+              marginLeft: 8,
+            }}
           >
-            {Array.from({ length: 18 }, (_, i) => i + 1).map(wk => (
-              <option key={wk} value={wk}>{wk}</option>
+            {Array.from(
+              { length: 18 },
+              (_, index) => index + 1
+            ).map(week => (
+              <option
+                key={week}
+                value={week}
+              >
+                {week}
+              </option>
             ))}
           </select>
 
-          <button onClick={loadUserPicks} style={{ marginLeft: 8 }}>
-            Load Picks
+          <button
+            onClick={loadUserPicks}
+            disabled={
+              loadingPicks ||
+              !weekReady
+            }
+            style={{ marginLeft: 8 }}
+          >
+            {loadingPicks
+              ? 'Loading…'
+              : 'Load Picks'}
           </button>
         </div>
+
         {loadingPicks ? (
           <p>Loading picks…</p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+            }}
+          >
             <thead>
               <tr>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Game</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Pick</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Lock?</th>
-                <th style={{ border: '1px solid #ccc', padding: 8 }}>Actions</th>
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Game
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Pick
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Lock?
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Actions
+                </th>
               </tr>
             </thead>
+
             <tbody>
-              {userPicks.map(pk => (
-                <tr key={pk.id}>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>
-                    {pk.games.away_team} @ {pk.games.home_team}
-                    <br /><small>{new Date(pk.games.kickoff_time).toLocaleString()}</small>
+              {userPicks.map(pick => (
+                <tr key={pick.id}>
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {pick.games.away_team} @{' '}
+                    {pick.games.home_team}
+
+                    <br />
+
+                    <small>
+                      {new Date(
+                        pick.games.kickoff_time
+                      ).toLocaleString()}
+                    </small>
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: 8 }}>{pk.selected_team}</td>
-                  <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>
-                    {pk.is_lock ? '✅' : ''}
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {pick.selected_team}
                   </td>
-                  <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {pick.is_lock ? '✅' : ''}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                      textAlign: 'center',
+                    }}
+                  >
                     <button
-                      onClick={() => handleDeletePick(pk.id)}
-                      style={{ background: 'red', color: 'white', padding: '6px 12px', border: 'none' }}
+                      onClick={() =>
+                        handleDeletePick(
+                          pick.id
+                        )
+                      }
+                      style={{
+                        background: 'red',
+                        color: 'white',
+                        padding: '6px 12px',
+                        border: 'none',
+                      }}
                     >
                       Delete
                     </button>
                   </td>
                 </tr>
               ))}
+
               {userPicks.length === 0 && (
                 <tr>
-                  <td colSpan={4} style={{ padding: 8, textAlign: 'center' }}>No picks found.</td>
+                  <td
+                    colSpan={4}
+                    style={{
+                      padding: 8,
+                      textAlign: 'center',
+                    }}
+                  >
+                    No picks found.
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -530,32 +1321,159 @@ export default function Admin() {
         )}
       </section>
 
-      {/* Calculate Weekly Scores (existing table, corrected math) */}
+      {/* Calculate Weekly Scores */}
       <section style={{ marginTop: 40 }}>
-        <h2>Calculate Scores (Week {selectedWeek})</h2>
-        <button onClick={calculateScores}>Calculate Scores</button>
-        {loadingScores && <p>Calculating…</p>}
+        <h2>
+          Calculate Scores (Week{' '}
+          {selectedWeek})
+        </h2>
+
+        <button
+          onClick={calculateScores}
+          disabled={
+            loadingScores ||
+            !weekReady
+          }
+        >
+          {loadingScores
+            ? 'Calculating…'
+            : 'Calculate Scores'}
+        </button>
+
         {weeklyScores.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12 }}>
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              marginTop: 12,
+            }}
+          >
             <thead>
               <tr>
-                <th style={{ border:'1px solid #ccc', padding: 8 }}>Email</th>
-                <th style={{ border:'1px solid #ccc', padding: 8 }}>Points</th>
-                <th style={{ border:'1px solid #ccc', padding: 8 }}>Correct</th>
-                <th style={{ border:'1px solid #ccc', padding: 8 }}>Lock ✔</th>
-                <th style={{ border:'1px solid #ccc', padding: 8 }}>Lock ✘</th>
-                <th style={{ border:'1px solid #ccc', padding: 8 }}>Bonus</th>
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Email
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Points
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Correct
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Lock ✔
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Lock ✘
+                </th>
+
+                <th
+                  style={{
+                    border:
+                      '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Bonus
+                </th>
               </tr>
             </thead>
+
             <tbody>
-              {weeklyScores.map(u => (
-                <tr key={u.email}>
-                  <td style={{ border:'1px solid #ccc', padding: 8 }}>{u.email}</td>
-                  <td style={{ border:'1px solid #ccc', padding: 8 }}>{u.weeklyPoints}</td>
-                  <td style={{ border:'1px solid #ccc', padding: 8 }}>{u.correct}</td>
-                  <td style={{ border:'1px solid #ccc', padding: 8 }}>{u.lockCorrect}</td>
-                  <td style={{ border:'1px solid #ccc', padding: 8 }}>{u.lockIncorrect}</td>
-                  <td style={{ border:'1px solid #ccc', padding: 8 }}>{u.perfectBonus}</td>
+              {weeklyScores.map(user => (
+                <tr key={user.email}>
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {user.email}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {user.weeklyPoints}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {user.correct}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {user.lockCorrect}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {user.lockIncorrect}
+                  </td>
+
+                  <td
+                    style={{
+                      border:
+                        '1px solid #ccc',
+                      padding: 8,
+                    }}
+                  >
+                    {user.perfectBonus}
+                  </td>
                 </tr>
               ))}
             </tbody>
