@@ -701,17 +701,17 @@ export default function Dashboard() {
           </label>
 
           <button
+            className="action-button load-picks-button"
             onClick={() =>
               loadLeaguePicks(lpWeek)
             }
             disabled={
               lpLoading || !weekReady
             }
-            style={{ marginLeft: 8 }}
           >
             {lpLoading
               ? 'Loading…'
-              : 'Refresh Picks'}
+              : 'Load Picks'}
           </button>
 
           {weekReady && (
@@ -806,6 +806,53 @@ export default function Dashboard() {
           </p>
         )}
       </section>
+
+      <style jsx>{`
+        .action-button {
+          appearance: none;
+          min-width: 120px;
+          margin-left: 8px;
+          padding: 9px 16px;
+          border: 1px solid #1d4ed8;
+          border-radius: 8px;
+          background: #2563eb;
+          color: #ffffff;
+          font-size: 14px;
+          font-weight: 700;
+          line-height: 1.2;
+          cursor: pointer;
+          box-shadow: 0 4px 0 #1e40af;
+          transition:
+            transform 80ms ease,
+            box-shadow 80ms ease,
+            background-color 150ms ease;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .action-button:hover:not(:disabled) {
+          background: #1d4ed8;
+        }
+
+        .action-button:active:not(:disabled) {
+          transform: translateY(4px);
+          box-shadow: 0 0 0 #1e40af;
+        }
+
+        .action-button:focus-visible {
+          outline: 3px solid rgba(37, 99, 235, 0.35);
+          outline-offset: 3px;
+        }
+
+        .action-button:disabled {
+          border-color: #94a3b8;
+          background: #cbd5e1;
+          color: #64748b;
+          cursor: not-allowed;
+          box-shadow: 0 3px 0 #94a3b8;
+          transform: none;
+        }
+      `}</style>
     </div>
   )
 }
