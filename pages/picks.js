@@ -17,6 +17,7 @@ export default function PickSubmission() {
   const [lockPick, setLockPick]         = useState(null)
   const [status, setStatus]             = useState(null)
   const [loadingGames, setLoadingGames] = useState(false)
+  const [submitting, setSubmitting]     = useState(false)
 
   // Determine the current NFL week.
   // The week advances only after Tuesday at 10:00 PM Eastern.
@@ -225,6 +226,8 @@ export default function PickSubmission() {
   }
 
   const savePicks = async () => {
+    setSubmitting(true)
+
     const entries = Object.entries(picks)
 
     const inserts = entries.map(([gid, team]) => ({
@@ -240,6 +243,7 @@ export default function PickSubmission() {
 
     if (error) {
       setStatus(`🚫 ${error.message}`)
+      setSubmitting(false)
       return
     }
 
@@ -257,11 +261,14 @@ export default function PickSubmission() {
     setPicks({})
     setLockPick(null)
     setStatus(
-      '✅ Picks submitted—those games are now hidden.'
+      '✅ Success! Your picks were submitted.'
     )
+    setSubmitting(false)
   }
 
   const submitPicks = () => {
+    if (submitting) return
+
     setStatus(null)
 
     const entries = Object.entries(picks)
@@ -305,6 +312,14 @@ export default function PickSubmission() {
     savePicks()
   }
 
+  const isSuccess =
+    typeof status === 'string' &&
+    status.startsWith('✅')
+
+  const isWarning =
+    typeof status === 'string' &&
+    status.startsWith('⚠️')
+
   return (
     <div style={{ padding: 20 }}>
       <h2>Submit Your Picks</h2>
@@ -317,14 +332,19 @@ export default function PickSubmission() {
       </p>
 
       {status && (
-        <pre
-          style={{
-            whiteSpace: 'pre-wrap',
-            marginBottom: 16,
-          }}
+        <div
+          className={
+            isSuccess
+              ? 'submission-message success-message'
+              : isWarning
+                ? 'submission-message warning-message'
+                : 'submission-message error-message'
+          }
+          role="status"
+          aria-live="polite"
         >
           {status}
-        </pre>
+        </div>
       )}
 
       <div style={{ marginBottom: 16 }}>
@@ -445,15 +465,91 @@ export default function PickSubmission() {
       )}
 
       <button
+        className="action-button submit-picks-button"
         onClick={submitPicks}
         disabled={
           !weekReady ||
           loadingGames ||
+          submitting ||
           games.length === 0
         }
       >
-        Submit Picks
+        {submitting ? 'Submitting…' : 'Submit Picks'}
       </button>
+
+      <style jsx>{`
+        .submission-message {
+          max-width: 560px;
+          margin: 0 0 18px;
+          padding: 14px 16px;
+          border: 1px solid;
+          border-radius: 8px;
+          font-weight: 700;
+          line-height: 1.4;
+        }
+
+        .success-message {
+          color: #166534;
+          background: #dcfce7;
+          border-color: #86efac;
+        }
+
+        .warning-message {
+          color: #854d0e;
+          background: #fef9c3;
+          border-color: #fde047;
+        }
+
+        .error-message {
+          color: #991b1b;
+          background: #fee2e2;
+          border-color: #fca5a5;
+        }
+
+        .action-button {
+          appearance: none;
+          min-width: 150px;
+          padding: 11px 20px;
+          border: 1px solid #1d4ed8;
+          border-radius: 8px;
+          background: #2563eb;
+          color: #ffffff;
+          font-size: 16px;
+          font-weight: 700;
+          line-height: 1.2;
+          cursor: pointer;
+          box-shadow: 0 4px 0 #1e40af;
+          transition:
+            transform 80ms ease,
+            box-shadow 80ms ease,
+            background-color 150ms ease;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .action-button:hover:not(:disabled) {
+          background: #1d4ed8;
+        }
+
+        .action-button:active:not(:disabled) {
+          transform: translateY(4px);
+          box-shadow: 0 0 0 #1e40af;
+        }
+
+        .action-button:focus-visible {
+          outline: 3px solid rgba(37, 99, 235, 0.35);
+          outline-offset: 3px;
+        }
+
+        .action-button:disabled {
+          border-color: #94a3b8;
+          background: #cbd5e1;
+          color: #64748b;
+          cursor: not-allowed;
+          box-shadow: 0 3px 0 #94a3b8;
+          transform: none;
+        }
+      `}</style>
     </div>
   )
 }
