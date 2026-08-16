@@ -15,8 +15,11 @@ export default function UserProfile() {
   const [weekReady, setWeekReady]       = useState(false)
   const [picks, setPicks]               = useState([])
   const [warning, setWarning]           = useState('')
+  const [success, setSuccess]           = useState('')
   const [error, setError]               = useState(null)
   const [loading, setLoading]           = useState(false)
+  const [deletingPickId, setDeletingPickId] = useState(null)
+  const [nowMs, setNowMs]               = useState(Date.now())
 
   // Determine the current NFL week.
   useEffect(() => {
@@ -57,6 +60,19 @@ export default function UserProfile() {
     }
   }, [session])
 
+  // Keep the delete/locked display current as kickoff approaches.
+  useEffect(() => {
+    if (!session) return
+
+    const interval = setInterval(() => {
+      setNowMs(Date.now())
+    }, 15000)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [session])
+
   // Automatically load picks when the current week is ready
   // or when the user manually changes weeks.
   useEffect(() => {
@@ -81,6 +97,7 @@ export default function UserProfile() {
     setLoading(true)
     setError(null)
     setWarning('')
+    setSuccess('')
     setPicks([])
 
     const { data, error: picksError } =
@@ -90,6 +107,7 @@ export default function UserProfile() {
           id,
           selected_team,
           is_lock,
+          submitted_at,
           games (
             id,
             home_team,
@@ -112,76 +130,92 @@ export default function UserProfile() {
       return
     }
 
-    // Drop any pick whose joined game is null.
+    // Drop rows whose joined game is null.
     const valid = (data || []).filter(
       pick =>
         pick.games &&
         pick.games.kickoff_time
     )
 
-    // Use local getDay() so Thursday/Monday match user TZ.
-    const getDow = iso =>
-      new Date(iso).getDay()
-
-    const thursday = []
-    const monday = []
-    const best = []
-
-    const isWeek18 = week === 18
-    const maxBest = isWeek18 ? 5 : 3
+    const seenGameIds = new Set()
+    let duplicateFound = false
 
     valid.forEach(pick => {
-      const day = getDow(
-        pick.games.kickoff_time
-      )
+      const gameId = String(pick.games.id)
 
-      if (
-        !isWeek18 &&
-        day === 4 &&
-        thursday.length < 1
-      ) {
-        thursday.push(pick)
-      } else if (
-        !isWeek18 &&
-        day === 1 &&
-        monday.length < 1
-      ) {
-        monday.push(pick)
-      } else if (best.length < maxBest) {
-        best.push(pick)
+      if (seenGameIds.has(gameId)) {
+        duplicateFound = true
       }
+
+      seenGameIds.add(gameId)
     })
 
-    // Only display the first lock pick if bad data
-    // somehow contains more than one.
-    let lockFound = false
-
-    const filtered = [
-      ...thursday,
-      ...best,
-      ...monday,
-    ].map(pick => {
-      if (pick.is_lock && !lockFound) {
-        lockFound = true
-        return pick
-      }
-
-      return {
-        ...pick,
-        is_lock: false,
-      }
-    })
-
-    if (filtered.length < valid.length) {
+    if (duplicateFound) {
       setWarning(
-        isWeek18
-          ? '⚠️ Showing a maximum of 5 Best-Choice picks for Week 18.'
-          : '⚠️ Showing a maximum of 1 Thursday, 3 Best-Choice, and 1 Monday pick.'
+        '⚠️ Duplicate picks are currently stored for this week. Delete the extra duplicate rows before submitting new picks.'
+      )
+    } else if (valid.length > 5) {
+      setWarning(
+        '⚠️ More than 5 picks are currently stored for this week. Delete the extra picks before submitting new picks.'
       )
     }
 
-    setPicks(filtered)
+    // Show every stored pick so the user can see and remove
+    // accidental duplicates or extra picks.
+    setPicks(valid)
     setLoading(false)
+  }
+
+  async function deletePick(pick) {
+    setError(null)
+    setSuccess('')
+
+    const kickoffMs = new Date(
+      pick.games.kickoff_time
+    ).getTime()
+
+    if (
+      Number.isNaN(kickoffMs) ||
+      kickoffMs <= Date.now()
+    ) {
+      setError(
+        'This pick can no longer be deleted because the game has already started.'
+      )
+      setNowMs(Date.now())
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete your ${pick.selected_team} pick?`
+    )
+
+    if (!confirmed) return
+
+    setDeletingPickId(pick.id)
+
+    const { error: deleteError } = await supabase
+      .from('picks')
+      .delete()
+      .eq('id', pick.id)
+      .eq('user_email', session.user.email)
+
+    if (deleteError) {
+      setError(deleteError.message)
+      setDeletingPickId(null)
+      return
+    }
+
+    setPicks(previousPicks =>
+      previousPicks.filter(
+        currentPick => currentPick.id !== pick.id
+      )
+    )
+
+    setSuccess(
+      '✅ Pick deleted successfully. You can return to Submit Picks to choose a replacement before kickoff.'
+    )
+    setDeletingPickId(null)
+    setNowMs(Date.now())
   }
 
   return (
@@ -244,15 +278,31 @@ export default function UserProfile() {
       </div>
 
       {error && (
-        <p style={{ color: 'red' }}>
-          Error: {error}
-        </p>
+        <div
+          className="profile-message error-message"
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div
+          className="profile-message success-message"
+          role="status"
+          aria-live="polite"
+        >
+          {success}
+        </div>
       )}
 
       {warning && (
-        <p style={{ color: '#a67c00' }}>
+        <div
+          className="profile-message warning-message"
+          role="status"
+        >
           {warning}
-        </p>
+        </div>
       )}
 
       {!weekReady || loading ? (
@@ -260,119 +310,241 @@ export default function UserProfile() {
           Loading Week {selectedWeek} picks…
         </p>
       ) : picks.length > 0 ? (
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-          }}
-        >
-          <thead>
-            <tr>
-              <th
-                style={{
-                  border: '1px solid #ccc',
-                  padding: 8,
-                }}
-              >
-                Game
-              </th>
+        <>
+          <p>
+            Stored picks for Week {selectedWeek}:{' '}
+            <strong>{picks.length}/5</strong>
+          </p>
 
-              <th
-                style={{
-                  border: '1px solid #ccc',
-                  padding: 8,
-                }}
-              >
-                Home Team Spread
-              </th>
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+            }}
+          >
+            <thead>
+              <tr>
+                <th
+                  style={{
+                    border: '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Game
+                </th>
 
-              <th
-                style={{
-                  border: '1px solid #ccc',
-                  padding: 8,
-                }}
-              >
-                Your Pick
-              </th>
+                <th
+                  style={{
+                    border: '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Home Team Spread
+                </th>
 
-              <th
-                style={{
-                  border: '1px solid #ccc',
-                  padding: 8,
-                }}
-              >
-                Lock?
-              </th>
-            </tr>
-          </thead>
+                <th
+                  style={{
+                    border: '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Your Pick
+                </th>
 
-          <tbody>
-            {picks.map(pick => {
-              const game = pick.games
+                <th
+                  style={{
+                    border: '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Lock?
+                </th>
 
-              return (
-                <tr key={pick.id}>
-                  <td
-                    style={{
-                      border: '1px solid #ccc',
-                      padding: 8,
-                    }}
-                  >
-                    {game.away_team} @{' '}
-                    {game.home_team}
+                <th
+                  style={{
+                    border: '1px solid #ccc',
+                    padding: 8,
+                  }}
+                >
+                  Action
+                </th>
+              </tr>
+            </thead>
 
-                    <br />
+            <tbody>
+              {picks.map(pick => {
+                const game = pick.games
+                const kickoffMs = new Date(
+                  game.kickoff_time
+                ).getTime()
 
-                    <small>
-                      {new Date(
-                        game.kickoff_time
-                      ).toLocaleString(undefined, {
-                        weekday: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </small>
-                  </td>
+                const canDelete =
+                  !Number.isNaN(kickoffMs) &&
+                  kickoffMs > nowMs
 
-                  <td
-                    style={{
-                      border: '1px solid #ccc',
-                      padding: 8,
-                    }}
-                  >
-                    {game.spread > 0
-                      ? `+${game.spread}`
-                      : game.spread}
-                  </td>
+                const deleting =
+                  deletingPickId === pick.id
 
-                  <td
-                    style={{
-                      border: '1px solid #ccc',
-                      padding: 8,
-                    }}
-                  >
-                    {pick.selected_team}
-                  </td>
+                return (
+                  <tr key={pick.id}>
+                    <td
+                      style={{
+                        border: '1px solid #ccc',
+                        padding: 8,
+                      }}
+                    >
+                      {game.away_team} @{' '}
+                      {game.home_team}
 
-                  <td
-                    style={{
-                      border: '1px solid #ccc',
-                      padding: 8,
-                      textAlign: 'center',
-                    }}
-                  >
-                    {pick.is_lock ? '✅' : ''}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                      <br />
+
+                      <small>
+                        {new Date(
+                          game.kickoff_time
+                        ).toLocaleString(undefined, {
+                          weekday: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </small>
+                    </td>
+
+                    <td
+                      style={{
+                        border: '1px solid #ccc',
+                        padding: 8,
+                      }}
+                    >
+                      {game.spread > 0
+                        ? `+${game.spread}`
+                        : game.spread}
+                    </td>
+
+                    <td
+                      style={{
+                        border: '1px solid #ccc',
+                        padding: 8,
+                      }}
+                    >
+                      {pick.selected_team}
+                    </td>
+
+                    <td
+                      style={{
+                        border: '1px solid #ccc',
+                        padding: 8,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {pick.is_lock ? '✅' : ''}
+                    </td>
+
+                    <td
+                      style={{
+                        border: '1px solid #ccc',
+                        padding: 8,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {canDelete ? (
+                        <button
+                          className="delete-pick-button"
+                          onClick={() =>
+                            deletePick(pick)
+                          }
+                          disabled={deleting}
+                        >
+                          {deleting
+                            ? 'Deleting…'
+                            : 'Delete Pick'}
+                        </button>
+                      ) : (
+                        <span className="locked-pick">
+                          🔒 Locked
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </>
       ) : (
         <p>
           No picks found for Week {selectedWeek}.
         </p>
       )}
+
+      <style jsx>{`
+        .profile-message {
+          max-width: 620px;
+          margin: 0 0 16px;
+          padding: 12px 14px;
+          border: 1px solid;
+          border-radius: 8px;
+          font-weight: 700;
+          line-height: 1.4;
+        }
+
+        .success-message {
+          color: #166534;
+          background: #dcfce7;
+          border-color: #86efac;
+        }
+
+        .warning-message {
+          color: #854d0e;
+          background: #fef9c3;
+          border-color: #fde047;
+        }
+
+        .error-message {
+          color: #991b1b;
+          background: #fee2e2;
+          border-color: #fca5a5;
+        }
+
+        .delete-pick-button {
+          appearance: none;
+          padding: 8px 12px;
+          border: 1px solid #b91c1c;
+          border-radius: 7px;
+          background: #dc2626;
+          color: white;
+          font-size: 14px;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 0 3px 0 #991b1b;
+          transition:
+            transform 80ms ease,
+            box-shadow 80ms ease,
+            background-color 150ms ease;
+        }
+
+        .delete-pick-button:hover:not(:disabled) {
+          background: #b91c1c;
+        }
+
+        .delete-pick-button:active:not(:disabled) {
+          transform: translateY(3px);
+          box-shadow: 0 0 0 #991b1b;
+        }
+
+        .delete-pick-button:disabled {
+          background: #cbd5e1;
+          border-color: #94a3b8;
+          color: #64748b;
+          box-shadow: none;
+          cursor: not-allowed;
+        }
+
+        .locked-pick {
+          color: #64748b;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+      `}</style>
     </div>
   )
 }
