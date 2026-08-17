@@ -479,31 +479,37 @@ export default function PickSubmission() {
           'id,user_email,game_id,selected_team,is_lock,submitted_at'
         )
 
-      if (error) {
-        const errorMessage =
-          String(error.message || '').toUpperCase()
+     if (error) {
+  const errorMessage =
+    String(error.message || '').toUpperCase()
 
-        if (
-          error.code === '23505' ||
-          errorMessage.includes('DUPLICATE_PICK') ||
-          errorMessage.includes('DUPLICATE KEY')
-        ) {
-          setStatus(
-            '🚫 Duplicate pick submitted, please try again.'
-          )
-        } else if (
-          errorMessage.includes('MAX_WEEKLY_PICKS')
-        ) {
-          setStatus(
-            '🚫 You already have 5 picks stored for this week. Delete an existing pick from My Profile before submitting another.'
-          )
-        } else {
-          setStatus(`🚫 ${error.message}`)
-        }
+  if (
+    errorMessage.includes('LOCK_ALREADY_EXISTS')
+  ) {
+    setStatus(
+      '🚫 You already have a lock pick submitted for this week. Only one lock pick is allowed.'
+    )
+  } else if (
+    error.code === '23505' ||
+    errorMessage.includes('DUPLICATE_PICK') ||
+    errorMessage.includes('DUPLICATE KEY')
+  ) {
+    setStatus(
+      '🚫 Duplicate pick submitted, please try again.'
+    )
+  } else if (
+    errorMessage.includes('MAX_WEEKLY_PICKS')
+  ) {
+    setStatus(
+      '🚫 You already have 5 picks stored for this week. Delete an existing pick from My Profile before submitting another.'
+    )
+  } else {
+    setStatus(`🚫 ${error.message}`)
+  }
 
-        return
-      }
-
+  return
+}
+      
       const submittedIds = entries.map(([gid]) =>
         String(gid)
       )
