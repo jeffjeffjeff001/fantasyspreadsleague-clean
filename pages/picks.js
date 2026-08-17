@@ -842,35 +842,35 @@ export default function PickSubmission() {
           font-size: 14px;
         }
 
-        .action-button {
-          appearance: none;
-          min-width: 150px;
-          padding: 11px 20px;
-          border: 1px solid #1d4ed8;
-          border-radius: 8px;
-          background: #2563eb;
-          color: #ffffff;
-          font-size: 16px;
-          font-weight: 700;
-          line-height: 1.2;
-          cursor: pointer;
-          box-shadow: 0 4px 0 #1e40af;
-          transition:
-            transform 80ms ease,
-            box-shadow 80ms ease,
-            background-color 150ms ease;
-          user-select: none;
-          -webkit-tap-highlight-color: transparent;
-        }
+       .action-button {
+  appearance: none;
+  min-width: 150px;
+  padding: 11px 20px;
+  border: 1px solid #b91c1c;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #991b1b;
+  transition:
+    transform 80ms ease,
+    box-shadow 80ms ease,
+    background-color 150ms ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
 
-        .action-button:hover:not(:disabled) {
-          background: #1d4ed8;
-        }
+.action-button:hover:not(:disabled) {
+  background: #b91c1c;
+}
 
-        .action-button:active:not(:disabled) {
-          transform: translateY(4px);
-          box-shadow: 0 0 0 #1e40af;
-        }
+.action-button:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #991b1b;
+}
 
         .action-button:focus-visible {
           outline: 3px solid rgba(37, 99, 235, 0.35);
