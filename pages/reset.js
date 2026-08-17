@@ -1,119 +1,407 @@
 // pages/reset.js
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { supabase } from '../lib/supabaseClient'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
-  const [ready, setReady] = useState(false)
-  const [error, setError] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [saving, setSaving] = useState(false)
 
-  // 1) Exchange the link token for a session (works for both vercel/codespaces)
+  const [ready, setReady] =
+    useState(false)
+
+  const [error, setError] =
+    useState('')
+
+  const [message, setMessage] =
+    useState('')
+
+  const [password, setPassword] =
+    useState('')
+
+  const [confirm, setConfirm] =
+    useState('')
+
+  const [saving, setSaving] =
+    useState(false)
+
+  // ------------------------------------------------------------
+  // Validate the recovery link and establish
+  // the temporary authenticated recovery session.
+  // ------------------------------------------------------------
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      try {
-        // Supabase v2 uses a "code" query param for magic links.
-        const params = new URLSearchParams(window.location.search)
-        const code = params.get('code')
 
-        if (code && typeof supabase.auth.exchangeCodeForSession === 'function') {
-          await supabase.auth.exchangeCodeForSession({ code })
-        } else if (typeof supabase.auth.getSessionFromUrl === 'function') {
-          // Fallback for older SDKs / hash style links
-          await supabase.auth.getSessionFromUrl({ storeSession: true })
+    async function prepareRecoverySession() {
+      try {
+        const params =
+          new URLSearchParams(
+            window.location.search
+          )
+
+        const code =
+          params.get('code')
+
+        // PKCE-style recovery links contain a code.
+        if (code) {
+          const {
+            error: exchangeError,
+          } =
+            await supabase.auth
+              .exchangeCodeForSession(code)
+
+          if (exchangeError) {
+            // The client may already have exchanged
+            // the code automatically. Check whether
+            // a valid session exists before failing.
+            const {
+              data: {
+                session:
+                  existingSession,
+              },
+            } =
+              await supabase.auth
+                .getSession()
+
+            if (!existingSession) {
+              throw exchangeError
+            }
+          }
         }
 
-        if (!cancelled) setReady(true)
-      } catch (e) {
+        const {
+          data: { session },
+          error: sessionError,
+        } =
+          await supabase.auth.getSession()
+
+        if (sessionError) {
+          throw sessionError
+        }
+
+        if (!session) {
+          throw new Error(
+            'No recovery session found.'
+          )
+        }
+
         if (!cancelled) {
-          setError('Invalid or expired reset link. Please request a new one.')
+          setError('')
+          setReady(true)
+        }
+      } catch (recoveryError) {
+        console.error(
+          'Password recovery error:',
+          recoveryError
+        )
+
+        if (!cancelled) {
+          setError(
+            'This password reset link is invalid or has expired. Please request a new reset link.'
+          )
+
           setReady(true)
         }
       }
-    })()
-    return () => { cancelled = true }
+    }
+
+    prepareRecoverySession()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  const handleUpdate = async () => {
-    setError('')
-    if (!password || password.length < 6) {
-      setError('Password must be at least 6 characters.')
-      return
-    }
-    if (password !== confirm) {
-      setError('Passwords do not match.')
-      return
-    }
-    setSaving(true)
-    try {
-      const { error: upErr } = await supabase.auth.updateUser({ password })
-      if (upErr) throw upErr
+  const handleUpdate =
+    async event => {
+      event.preventDefault()
 
-      // Optional: log out the short-lived session and send back to sign in.
-      await supabase.auth.signOut()
-      router.replace('/auth?mode=sign-in')
-    } catch (e) {
-      setError(e.message || 'Could not update password.')
-    } finally {
-      setSaving(false)
+      setError('')
+      setMessage('')
+
+      if (
+        !password ||
+        password.length < 6
+      ) {
+        setError(
+          'Password must be at least 6 characters.'
+        )
+        return
+      }
+
+      if (password !== confirm) {
+        setError(
+          'Passwords do not match.'
+        )
+        return
+      }
+
+      setSaving(true)
+
+      try {
+        const {
+          error: updateError,
+        } =
+          await supabase.auth.updateUser({
+            password,
+          })
+
+        if (updateError) {
+          throw updateError
+        }
+
+        setPassword('')
+        setConfirm('')
+
+        setMessage(
+          '✅ Password updated successfully! Redirecting you back to Fantasy Spreads League…'
+        )
+
+        setTimeout(() => {
+          router.replace('/')
+        }, 1200)
+      } catch (updateError) {
+        setError(
+          updateError.message ||
+            'Could not update your password.'
+        )
+      } finally {
+        setSaving(false)
+      }
     }
+
+  const requestAnotherLink = () => {
+    router.replace(
+      '/auth?mode=reset'
+    )
   }
 
   return (
-    <div style={{ minHeight:'100vh', display:'grid', placeItems:'center' }}>
-      <div className="card" style={{ width: 420, padding: 24 }}>
-        <h2 style={{ marginBottom: 10 }}>Reset your password</h2>
+    <div className="reset-page">
+      <div className="reset-card">
+        <h1>Create New Password</h1>
 
         {!ready ? (
-          <p>Validating reset link…</p>
+          <p>
+            Validating your reset link…
+          </p>
         ) : (
           <>
             {error && (
-              <p style={{ color: 'tomato', marginBottom: 12 }}>{error}</p>
+              <div
+                className="alert error"
+                role="alert"
+              >
+                {error}
+              </div>
             )}
 
-            {!error && (
-              <>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={{ display:'block', color:'#000', marginBottom:4 }}>
-                    New password
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    style={{ width:'100%', padding:8, color:'#000' }}
-                  />
-                </div>
+            {message && (
+              <div
+                className="alert success"
+                role="status"
+                aria-live="polite"
+              >
+                {message}
+              </div>
+            )}
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display:'block', color:'#000', marginBottom:4 }}>
-                    Confirm new password
-                  </label>
-                  <input
-                    type="password"
-                    value={confirm}
-                    onChange={e => setConfirm(e.target.value)}
-                    style={{ width:'100%', padding:8, color:'#000' }}
-                  />
-                </div>
+            {!message &&
+              !error && (
+                <>
+                  <p className="intro-text">
+                    Enter your new Fantasy
+                    Spreads League password
+                    below.
+                  </p>
 
-                <button
-                  onClick={handleUpdate}
-                  disabled={saving}
-                  className="btn-primary"
-                >
-                  {saving ? 'Updating…' : 'Update password'}
-                </button>
-              </>
+                  <form
+                    onSubmit={
+                      handleUpdate
+                    }
+                  >
+                    <label>
+                      New Password
+                    </label>
+
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={event =>
+                        setPassword(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="At least 6 characters"
+                    />
+
+                    <label>
+                      Confirm New Password
+                    </label>
+
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirm}
+                      onChange={event =>
+                        setConfirm(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="Re-enter password"
+                    />
+
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={saving}
+                    >
+                      {saving
+                        ? 'Updating Password…'
+                        : 'Update Password'}
+                    </button>
+                  </form>
+                </>
+              )}
+
+            {error && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={
+                  requestAnotherLink
+                }
+              >
+                Request Another Reset Link
+              </button>
             )}
           </>
         )}
       </div>
+
+      <style jsx>{`
+        .reset-page {
+          min-height: calc(100vh - 80px);
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+          padding: 48px 16px;
+        }
+
+        .reset-card {
+          width: 100%;
+          max-width: 440px;
+        }
+
+        h1 {
+          margin: 0 0 12px;
+          font-size: 28px;
+        }
+
+        .intro-text {
+          margin: 0 0 22px;
+          color: #cbd5e1;
+          line-height: 1.5;
+        }
+
+        label {
+          display: block;
+          margin-bottom: 5px;
+          font-weight: 600;
+        }
+
+        input {
+          box-sizing: border-box;
+          display: block;
+          width: 100%;
+          margin-bottom: 14px;
+          padding: 11px 12px;
+          border: 1px solid #94a3b8;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #111827;
+          font-size: 16px;
+        }
+
+        input:focus {
+          outline: 3px solid
+            rgba(37, 99, 235, 0.3);
+          border-color: #2563eb;
+        }
+
+        .primary-button,
+        .secondary-button {
+          appearance: none;
+          width: 100%;
+          padding: 12px 16px;
+          border-radius: 8px;
+          font-size: 16px;
+          font-weight: 700;
+          cursor: pointer;
+          transition:
+            transform 80ms ease,
+            box-shadow 80ms ease,
+            background-color 150ms ease;
+        }
+
+        .primary-button {
+          border: 1px solid #6d28d9;
+          background: #7c3aed;
+          color: #ffffff;
+          box-shadow: 0 4px 0 #4c1d95;
+        }
+
+        .primary-button:hover:not(:disabled) {
+          background: #6d28d9;
+        }
+
+        .primary-button:active:not(:disabled) {
+          transform: translateY(4px);
+          box-shadow: 0 0 0 #4c1d95;
+        }
+
+        .secondary-button {
+          margin-top: 12px;
+          border: 1px solid #64748b;
+          background: #475569;
+          color: #ffffff;
+          box-shadow: 0 4px 0 #334155;
+        }
+
+        .secondary-button:active {
+          transform: translateY(4px);
+          box-shadow: none;
+        }
+
+        button:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
+        .alert {
+          margin: 0 0 18px;
+          padding: 12px 14px;
+          border: 1px solid;
+          border-radius: 8px;
+          font-weight: 600;
+          line-height: 1.45;
+        }
+
+        .success {
+          border-color: #86efac;
+          background: #dcfce7;
+          color: #166534;
+        }
+
+        .error {
+          border-color: #fca5a5;
+          background: #fee2e2;
+          color: #991b1b;
+        }
+      `}</style>
     </div>
   )
 }
