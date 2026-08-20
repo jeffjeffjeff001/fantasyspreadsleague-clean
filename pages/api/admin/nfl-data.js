@@ -449,23 +449,28 @@ async function loadScheduleWithDraftKings(
       ...fallbackTimes
     )
 
-  const commenceTimeFrom =
-    new Date(
-      minTime -
-        24 *
-          60 *
-          60 *
-          1000
-    ).toISOString()
+const formatOddsApiTime = date =>
+  new Date(date)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, 'Z')
 
-  const commenceTimeTo =
-    new Date(
-      maxTime +
-        24 *
-          60 *
-          60 *
-          1000
-    ).toISOString()
+const commenceTimeFrom =
+  formatOddsApiTime(
+    minTime -
+      24 *
+        60 *
+        60 *
+        1000
+  )
+
+const commenceTimeTo =
+  formatOddsApiTime(
+    maxTime +
+      24 *
+        60 *
+        60 *
+        1000
+  )
 
   const eventsUrl =
     new URL(
