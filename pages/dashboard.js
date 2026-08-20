@@ -16,8 +16,9 @@ export default function Dashboard() {
   const [wsLoading, setWsLoading]   = useState(false)
 
   // Shared current-week state
-  const [weekReady, setWeekReady]   = useState(false)
-  const [weekError, setWeekError]   = useState('')
+  const [currentWeek, setCurrentWeek] = useState(1)
+  const [weekReady, setWeekReady]     = useState(false)
+  const [weekError, setWeekError]     = useState('')
 
   // Leaderboard state
   const [leaderboard, setLeaderboard] = useState([])
@@ -28,7 +29,7 @@ export default function Dashboard() {
   const [lpPicks, setLpPicks]     = useState([])
   const [lpLoading, setLpLoading] = useState(false)
 
-  // Set both Dashboard week selectors to the current NFL week.
+  // Set Dashboard selectors and standings to the current NFL week.
   useEffect(() => {
     let cancelled = false
 
@@ -38,6 +39,7 @@ export default function Dashboard() {
           await fetchCurrentWeek(supabase)
 
         if (!cancelled) {
+          setCurrentWeek(currentWeek)
           setWsWeek(currentWeek)
           setLpWeek(currentWeek)
         }
@@ -74,9 +76,11 @@ export default function Dashboard() {
       .toUpperCase()
 
   // ================================================================
-  // Leaderboard: read from SQL views
+  // Leaderboard: current standings + prior-week movement
   // ================================================================
   useEffect(() => {
+    if (!weekReady) return
+
     async function loadLeaderboard() {
       setLbLoading(true)
 
@@ -102,6 +106,7 @@ export default function Dashboard() {
           ] = profile.username || profile.email
         })
 
+        // Current cumulative standings.
         const {
           data: totals,
           error: totalsError,
@@ -115,18 +120,90 @@ export default function Dashboard() {
           throw totalsError
         }
 
-        const rows = (totals || []).map(total => ({
-          username:
-            nameByEmail[
-              (total.email || '').toLowerCase()
-            ] || total.email,
-          totalCorrect: Number(
-            total.total_correct_final || 0
-          ),
-          totalPoints: Number(
-            total.total_points_final || 0
-          ),
-        }))
+        // Build cumulative standings through the end
+        // of the previous NFL week.
+        let previousWeekRows = []
+
+        if (currentWeek > 1) {
+          const {
+            data: weeklyRows,
+            error: weeklyError,
+          } = await supabase
+            .from('user_weekly_points_v')
+            .select(
+              'email,week,correct_picks,weekly_points_final'
+            )
+            .lt('week', currentWeek)
+
+          if (weeklyError) {
+            throw weeklyError
+          }
+
+          previousWeekRows = weeklyRows || []
+        }
+
+        const previousByEmail = {}
+
+        previousWeekRows.forEach(row => {
+          const email = (
+            row.email || ''
+          ).toLowerCase()
+
+          if (!email) return
+
+          if (!previousByEmail[email]) {
+            previousByEmail[email] = {
+              email,
+              totalCorrect: 0,
+              totalPoints: 0,
+            }
+          }
+
+          previousByEmail[email].totalCorrect +=
+            Number(row.correct_picks || 0)
+
+          previousByEmail[email].totalPoints +=
+            Number(row.weekly_points_final || 0)
+        })
+
+        // Rank previous standings using the same rules
+        // as the live leaderboard:
+        // Total Points first, Total Correct second.
+        const previousStandings = Object.values(
+          previousByEmail
+        ).sort(
+          (a, b) =>
+            b.totalPoints - a.totalPoints ||
+            b.totalCorrect - a.totalCorrect
+        )
+
+        const previousRankByEmail = {}
+
+        previousStandings.forEach(
+          (row, index) => {
+            previousRankByEmail[row.email] =
+              index + 1
+          }
+        )
+
+        const rows = (totals || []).map(total => {
+          const email = (
+            total.email || ''
+          ).toLowerCase()
+
+          return {
+            email,
+            username:
+              nameByEmail[email] ||
+              total.email,
+            totalCorrect: Number(
+              total.total_correct_final || 0
+            ),
+            totalPoints: Number(
+              total.total_points_final || 0
+            ),
+          }
+        })
 
         rows.sort(
           (a, b) =>
@@ -134,19 +211,66 @@ export default function Dashboard() {
             b.totalCorrect - a.totalCorrect
         )
 
+        const rowsWithMovement = rows.map(
+          (row, index) => {
+            const currentRank = index + 1
+
+            // Week 1 has no previous standings.
+            if (currentWeek === 1) {
+              return {
+                ...row,
+                currentRank,
+                previousTotal: null,
+                previousRank: null,
+                rankChange: null,
+                isNewToStandings: false,
+              }
+            }
+
+            const previous =
+              previousByEmail[row.email]
+
+            const previousRank =
+              previousRankByEmail[row.email] ??
+              null
+
+            return {
+              ...row,
+              currentRank,
+
+              previousTotal:
+                previous?.totalPoints ?? 0,
+
+              previousRank,
+
+              // Positive = moved up.
+              // Negative = moved down.
+              rankChange:
+                previousRank == null
+                  ? null
+                  : previousRank -
+                    currentRank,
+
+              isNewToStandings:
+                previousRank == null,
+            }
+          }
+        )
+
         if (DEBUG) {
           console.debug(
             '[DEBUG] leaderboard rows →',
-            rows.slice(0, 5)
+            rowsWithMovement.slice(0, 5)
           )
         }
 
-        setLeaderboard(rows)
+        setLeaderboard(rowsWithMovement)
       } catch (error) {
         console.error(
           'Leaderboard load error:',
           error
         )
+
         setLeaderboard([])
       } finally {
         setLbLoading(false)
@@ -154,7 +278,7 @@ export default function Dashboard() {
     }
 
     loadLeaderboard()
-  }, [])
+  }, [weekReady, currentWeek])
 
   // ================================================================
   // Weekly Score
@@ -234,14 +358,18 @@ export default function Dashboard() {
 
       const payload = {
         email: weekRow.email,
+
         correct: Number(
           weekRow.correct_picks || 0
         ),
+
         lockCorrect,
         lockIncorrect,
+
         perfectBonus: Number(
           weekRow.perfect_bonus || 0
         ),
+
         weeklyPoints: Number(
           weekRow.weekly_points_final || 0
         ),
@@ -310,14 +438,16 @@ export default function Dashboard() {
         return
       }
 
-      const gameIds = games.map(game => game.id)
+      const gameIds =
+        games.map(game => game.id)
 
-      const gamesById = Object.fromEntries(
-        games.map(game => [
-          String(game.id),
-          game,
-        ])
-      )
+      const gamesById =
+        Object.fromEntries(
+          games.map(game => [
+            String(game.id),
+            game,
+          ])
+        )
 
       const {
         data: picks,
@@ -337,7 +467,9 @@ export default function Dashboard() {
 
       ;(picks || []).forEach(pick => {
         const game =
-          gamesById[String(pick.game_id)]
+          gamesById[
+            String(pick.game_id)
+          ]
 
         if (!game) return
 
@@ -351,6 +483,7 @@ export default function Dashboard() {
               userMap[email] ||
               pick.user_email ||
               email,
+
             thursday: null,
             best: [],
             monday: null,
@@ -365,40 +498,62 @@ export default function Dashboard() {
           team: (
             pick.selected_team || ''
           ).trim(),
-          isLock: Boolean(pick.is_lock),
+
+          isLock:
+            Boolean(pick.is_lock),
         }
 
-        if (week !== 18 && day === 4) {
-          grouped[email].thursday = item
-        } else if (week !== 18 && day === 1) {
-          grouped[email].monday = item
+        if (
+          week !== 18 &&
+          day === 4
+        ) {
+          grouped[email].thursday =
+            item
+        } else if (
+          week !== 18 &&
+          day === 1
+        ) {
+          grouped[email].monday =
+            item
         } else {
-          grouped[email].best.push(item)
+          grouped[email].best.push(
+            item
+          )
         }
       })
 
       // Include users who have no picks.
-      ;(profiles || []).forEach(profile => {
-        const email = (
-          profile.email || ''
-        ).toLowerCase()
+      ;(profiles || []).forEach(
+        profile => {
+          const email = (
+            profile.email || ''
+          ).toLowerCase()
 
-        if (email && !grouped[email]) {
-          grouped[email] = {
-            username: profile.username,
-            thursday: null,
-            best: [],
-            monday: null,
+          if (
+            email &&
+            !grouped[email]
+          ) {
+            grouped[email] = {
+              username:
+                profile.username,
+
+              thursday: null,
+              best: [],
+              monday: null,
+            }
           }
         }
-      })
-
-      const list = Object.values(grouped).sort(
-        (a, b) =>
-          (a.username || '').localeCompare(
-            b.username || ''
-          )
       )
+
+      const list =
+        Object.values(grouped).sort(
+          (a, b) =>
+            (
+              a.username || ''
+            ).localeCompare(
+              b.username || ''
+            )
+        )
 
       setLpPicks(list)
     } catch (error) {
@@ -406,6 +561,7 @@ export default function Dashboard() {
         'loadLeaguePicks error:',
         error
       )
+
       setLpPicks([])
     } finally {
       setLpLoading(false)
@@ -430,7 +586,9 @@ export default function Dashboard() {
       : pick.team
   }
 
-  const renderBestList = (items = []) => {
+  const renderBestList = (
+    items = []
+  ) => {
     const maxBest =
       lpWeek === 18 ? 5 : 3
 
@@ -441,12 +599,77 @@ export default function Dashboard() {
       (pick, index) => (
         <span key={index}>
           {renderPick(pick)}
+
           {index <
           displayedItems.length - 1
             ? ', '
             : null}
         </span>
       )
+    )
+  }
+
+  // ================================================================
+  // Ranking movement display
+  // ================================================================
+  const renderRankMovement = user => {
+    // No previous standings in Week 1.
+    if (currentWeek === 1) {
+      return null
+    }
+
+    // Player did not appear in the previous standings.
+    if (user.isNewToStandings) {
+      return (
+        <span
+          className="rank-movement rank-new"
+          title="New to the standings"
+        >
+          NEW
+        </span>
+      )
+    }
+
+    // Positive means they moved upward.
+    if (user.rankChange > 0) {
+      return (
+        <span
+          className="rank-movement rank-up"
+          title={`Moved up ${user.rankChange} spot${
+            user.rankChange === 1
+              ? ''
+              : 's'
+          }`}
+        >
+          ↑{user.rankChange}
+        </span>
+      )
+    }
+
+    // Negative means they moved downward.
+    if (user.rankChange < 0) {
+      const spots =
+        Math.abs(user.rankChange)
+
+      return (
+        <span
+          className="rank-movement rank-down"
+          title={`Moved down ${spots} spot${
+            spots === 1 ? '' : 's'
+          }`}
+        >
+          ↓{spots}
+        </span>
+      )
+    }
+
+    return (
+      <span
+        className="rank-movement rank-same"
+        title="No change in rank"
+      >
+        —
+      </span>
     )
   }
 
@@ -466,28 +689,40 @@ export default function Dashboard() {
       </nav>
 
       {weekError && (
-        <p style={{ color: '#a67c00' }}>
+        <p
+          style={{
+            color: '#a67c00',
+          }}
+        >
           ⚠️ {weekError}
         </p>
       )}
 
       {/* Weekly Score */}
-      <section style={{ marginTop: 40 }}>
+      <section
+        style={{
+          marginTop: 40,
+        }}
+      >
         <h2>Weekly Score</h2>
 
         <label>
           Email:{' '}
+
           <input
             type="email"
             value={wsEmail}
             onChange={event =>
-              setWsEmail(event.target.value)
+              setWsEmail(
+                event.target.value
+              )
             }
           />
         </label>{' '}
 
         <label>
           Week:{' '}
+
           <select
             value={wsWeek}
             onChange={event =>
@@ -502,7 +737,8 @@ export default function Dashboard() {
           >
             {Array.from(
               { length: 18 },
-              (_, index) => index + 1
+              (_, index) =>
+                index + 1
             ).map(week => (
               <option
                 key={week}
@@ -515,11 +751,16 @@ export default function Dashboard() {
         </label>
 
         <button
-          onClick={fetchWeeklyScore}
-          disabled={
-            wsLoading || !weekReady
+          onClick={
+            fetchWeeklyScore
           }
-          style={{ marginLeft: 8 }}
+          disabled={
+            wsLoading ||
+            !weekReady
+          }
+          style={{
+            marginLeft: 8,
+          }}
         >
           {wsLoading
             ? 'Loading…'
@@ -538,7 +779,11 @@ export default function Dashboard() {
         )}
 
         {wsError && (
-          <p style={{ color: 'red' }}>
+          <p
+            style={{
+              color: 'red',
+            }}
+          >
             {wsError}
           </p>
         )}
@@ -548,7 +793,8 @@ export default function Dashboard() {
             border={1}
             cellPadding={8}
             style={{
-              borderCollapse: 'collapse',
+              borderCollapse:
+                'collapse',
               marginTop: 10,
             }}
           >
@@ -565,25 +811,52 @@ export default function Dashboard() {
 
             <tbody>
               <tr>
-                <td>{wsResult.email}</td>
+                <td>
+                  {wsResult.email}
+                </td>
 
-                <td style={{ textAlign: 'center' }}>
+                <td
+                  style={{
+                    textAlign:
+                      'center',
+                  }}
+                >
                   {wsResult.correct}
                 </td>
 
-                <td style={{ textAlign: 'center' }}>
+                <td
+                  style={{
+                    textAlign:
+                      'center',
+                  }}
+                >
                   {wsResult.lockCorrect}
                 </td>
 
-                <td style={{ textAlign: 'center' }}>
+                <td
+                  style={{
+                    textAlign:
+                      'center',
+                  }}
+                >
                   {wsResult.lockIncorrect}
                 </td>
 
-                <td style={{ textAlign: 'center' }}>
+                <td
+                  style={{
+                    textAlign:
+                      'center',
+                  }}
+                >
                   {wsResult.perfectBonus}
                 </td>
 
-                <td style={{ textAlign: 'center' }}>
+                <td
+                  style={{
+                    textAlign:
+                      'center',
+                  }}
+                >
                   {wsResult.weeklyPoints}
                 </td>
               </tr>
@@ -593,74 +866,166 @@ export default function Dashboard() {
       </section>
 
       {/* Leaderboard */}
-      <section style={{ marginTop: 60 }}>
-        <h2>League Leaderboard</h2>
+      <section
+        style={{
+          marginTop: 60,
+        }}
+      >
+        <h2>
+          League Leaderboard
+        </h2>
+
+        {currentWeek > 1 && (
+          <p className="leaderboard-note">
+            Last Wk Total shows each
+            player's cumulative points at
+            the end of Week{' '}
+            {currentWeek - 1}. Rank arrows
+            show movement from those
+            standings to the current
+            leaderboard.
+          </p>
+        )}
 
         {lbLoading ? (
-          <p>Loading leaderboard…</p>
+          <p>
+            Loading leaderboard…
+          </p>
         ) : (
-          <table
-            border={1}
-            cellPadding={8}
-            style={{
-              borderCollapse: 'collapse',
-              marginTop: 10,
-            }}
-          >
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Username</th>
-                <th>Total Correct</th>
-                <th>Total Points</th>
-              </tr>
-            </thead>
+          <div className="leaderboard-scroll">
+            <table
+              border={1}
+              cellPadding={8}
+              className="leaderboard-table"
+              style={{
+                borderCollapse:
+                  'collapse',
+                marginTop: 10,
+              }}
+            >
+              <thead>
+                <tr>
+                  <th>Rank</th>
 
-            <tbody>
-              {leaderboard.map(
-                (user, index) => (
-                  <tr
-                    key={
-                      user.username || index
-                    }
-                  >
-                    <td
-                      style={{
-                        textAlign: 'center',
-                      }}
+                  <th>
+                    Username
+                  </th>
+
+                  <th>
+                    Total Correct
+                  </th>
+
+                  <th>
+                    Total Points
+                  </th>
+
+                  <th>
+                    Last Wk Total
+                  </th>
+
+                  <th>
+                    Last Wk Rank
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {leaderboard.map(
+                  user => (
+                    <tr
+                      key={
+                        user.email
+                      }
                     >
-                      {index + 1}
-                    </td>
+                      <td
+                        style={{
+                          textAlign:
+                            'center',
+                        }}
+                      >
+                        <div className="rank-cell">
+                          <strong>
+                            {
+                              user.currentRank
+                            }
+                          </strong>
 
-                    <td>{user.username}</td>
+                          {renderRankMovement(
+                            user
+                          )}
+                        </div>
+                      </td>
 
-                    <td
-                      style={{
-                        textAlign: 'center',
-                      }}
-                    >
-                      {user.totalCorrect}
-                    </td>
+                      <td>
+                        {
+                          user.username
+                        }
+                      </td>
 
-                    <td
-                      style={{
-                        textAlign: 'center',
-                      }}
-                    >
-                      {user.totalPoints}
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
+                      <td
+                        style={{
+                          textAlign:
+                            'center',
+                        }}
+                      >
+                        {
+                          user.totalCorrect
+                        }
+                      </td>
+
+                      <td
+                        style={{
+                          textAlign:
+                            'center',
+                        }}
+                      >
+                        {
+                          user.totalPoints
+                        }
+                      </td>
+
+                      <td
+                        style={{
+                          textAlign:
+                            'center',
+                        }}
+                      >
+                        {currentWeek === 1
+                          ? '—'
+                          : user.previousTotal}
+                      </td>
+
+                      <td
+                        style={{
+                          textAlign:
+                            'center',
+                        }}
+                      >
+                        {currentWeek ===
+                          1 ||
+                        user.previousRank ==
+                          null
+                          ? '—'
+                          : user.previousRank}
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
       {/* League Picks */}
-      <section style={{ marginTop: 60 }}>
+      <section
+        style={{
+          marginTop: 60,
+        }}
+      >
         <h2>
           League Picks{' '}
+
           <small
             style={{
               color: '#94a3b8',
@@ -671,9 +1036,14 @@ export default function Dashboard() {
           </small>
         </h2>
 
-        <div style={{ marginBottom: 12 }}>
+        <div
+          style={{
+            marginBottom: 12,
+          }}
+        >
           <label>
             Week:&nbsp;
+
             <select
               value={lpWeek}
               onChange={event =>
@@ -684,11 +1054,14 @@ export default function Dashboard() {
                   )
                 )
               }
-              disabled={!weekReady}
+              disabled={
+                !weekReady
+              }
             >
               {Array.from(
                 { length: 18 },
-                (_, index) => index + 1
+                (_, index) =>
+                  index + 1
               ).map(week => (
                 <option
                   key={week}
@@ -703,10 +1076,13 @@ export default function Dashboard() {
           <button
             className="action-button load-picks-button"
             onClick={() =>
-              loadLeaguePicks(lpWeek)
+              loadLeaguePicks(
+                lpWeek
+              )
             }
             disabled={
-              lpLoading || !weekReady
+              lpLoading ||
+              !weekReady
             }
           >
             {lpLoading
@@ -721,30 +1097,40 @@ export default function Dashboard() {
                 color: '#64748b',
               }}
             >
-              Automatically opens to the current week.
+              Automatically opens to
+              the current week.
             </small>
           )}
         </div>
 
-        {!weekReady || lpLoading ? (
+        {!weekReady ||
+        lpLoading ? (
           <p>
-            Loading Week {lpWeek} picks…
+            Loading Week {lpWeek}{' '}
+            picks…
           </p>
-        ) : lpPicks.length > 0 ? (
+        ) : lpPicks.length >
+          0 ? (
           <table
             border={1}
             cellPadding={8}
             style={{
-              borderCollapse: 'collapse',
+              borderCollapse:
+                'collapse',
               marginTop: 10,
             }}
           >
             <thead>
               <tr>
-                <th>Username</th>
+                <th>
+                  Username
+                </th>
 
-                {lpWeek !== 18 && (
-                  <th>Thursday Pick</th>
+                {lpWeek !==
+                  18 && (
+                  <th>
+                    Thursday Pick
+                  </th>
                 )}
 
                 <th>
@@ -753,22 +1139,38 @@ export default function Dashboard() {
                     : 'Best-3 Picks'}
                 </th>
 
-                {lpWeek !== 18 && (
-                  <th>Monday Pick</th>
+                {lpWeek !==
+                  18 && (
+                  <th>
+                    Monday Pick
+                  </th>
                 )}
               </tr>
             </thead>
 
             <tbody>
               {lpPicks.map(
-                (user, index) => (
-                  <tr key={index}>
-                    <td>{user.username}</td>
+                (
+                  user,
+                  index
+                ) => (
+                  <tr
+                    key={
+                      index
+                    }
+                  >
+                    <td>
+                      {
+                        user.username
+                      }
+                    </td>
 
-                    {lpWeek !== 18 && (
+                    {lpWeek !==
+                      18 && (
                       <td
                         style={{
-                          textAlign: 'center',
+                          textAlign:
+                            'center',
                         }}
                       >
                         {renderPick(
@@ -783,10 +1185,12 @@ export default function Dashboard() {
                       )}
                     </td>
 
-                    {lpWeek !== 18 && (
+                    {lpWeek !==
+                      18 && (
                       <td
                         style={{
-                          textAlign: 'center',
+                          textAlign:
+                            'center',
                         }}
                       >
                         {renderPick(
@@ -801,13 +1205,60 @@ export default function Dashboard() {
           </table>
         ) : (
           <p>
-            No league picks found for Week{' '}
-            {lpWeek}.
+            No league picks found for
+            Week {lpWeek}.
           </p>
         )}
       </section>
 
       <style jsx>{`
+        .leaderboard-note {
+          margin: 6px 0 0;
+          color: #94a3b8;
+          font-size: 13px;
+          line-height: 1.45;
+        }
+
+        .leaderboard-scroll {
+          width: 100%;
+          overflow-x: auto;
+        }
+
+        .leaderboard-table {
+          min-width: 660px;
+        }
+
+        .rank-cell {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          white-space: nowrap;
+        }
+
+        .rank-movement {
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .rank-up {
+          color: #22c55e;
+        }
+
+        .rank-down {
+          color: #ef4444;
+        }
+
+        .rank-same {
+          color: #94a3b8;
+        }
+
+        .rank-new {
+          color: #eab308;
+          font-size: 10px;
+          letter-spacing: 0.04em;
+        }
+
         .action-button {
           appearance: none;
           min-width: 120px;
@@ -821,13 +1272,15 @@ export default function Dashboard() {
           font-weight: 700;
           line-height: 1.2;
           cursor: pointer;
-          box-shadow: 0 4px 0 #1e40af;
+          box-shadow:
+            0 4px 0 #1e40af;
           transition:
             transform 80ms ease,
             box-shadow 80ms ease,
             background-color 150ms ease;
           user-select: none;
-          -webkit-tap-highlight-color: transparent;
+          -webkit-tap-highlight-color:
+            transparent;
         }
 
         .action-button:hover:not(:disabled) {
@@ -835,12 +1288,21 @@ export default function Dashboard() {
         }
 
         .action-button:active:not(:disabled) {
-          transform: translateY(4px);
-          box-shadow: 0 0 0 #1e40af;
+          transform:
+            translateY(4px);
+          box-shadow:
+            0 0 0 #1e40af;
         }
 
         .action-button:focus-visible {
-          outline: 3px solid rgba(37, 99, 235, 0.35);
+          outline:
+            3px solid
+            rgba(
+              37,
+              99,
+              235,
+              0.35
+            );
           outline-offset: 3px;
         }
 
@@ -849,7 +1311,8 @@ export default function Dashboard() {
           background: #cbd5e1;
           color: #64748b;
           cursor: not-allowed;
-          box-shadow: 0 3px 0 #94a3b8;
+          box-shadow:
+            0 3px 0 #94a3b8;
           transform: none;
         }
       `}</style>
