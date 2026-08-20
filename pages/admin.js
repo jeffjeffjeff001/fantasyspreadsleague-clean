@@ -5,6 +5,8 @@ import Link from '../components/LegacyLink'
 import { supabase } from '../lib/supabaseClient'
 import { fetchCurrentWeek } from '../lib/currentWeek'
 
+const PRESEASON_TEST_STORAGE_WEEK = 18
+
 function normalizeTeam(value) {
   return String(value || '')
     .toLowerCase()
@@ -25,7 +27,6 @@ function isValidScore(value) {
   }
 
   const number = Number(value)
-
   return Number.isInteger(number) && number >= 0
 }
 
@@ -86,159 +87,67 @@ export default function Admin() {
   // ADMIN / WEEK STATE
   // ================================================================
 
-  const [enteredPw, setEnteredPw] =
-    useState('')
-
-  const [authorized, setAuthorized] =
-    useState(false)
-
-  const [selectedWeek, setSelectedWeek] =
-    useState(1)
-
-  const [weekReady, setWeekReady] =
-    useState(false)
-
-  const [weekError, setWeekError] =
-    useState('')
+  const [enteredPw, setEnteredPw] = useState('')
+  const [authorized, setAuthorized] = useState(false)
+  const [selectedWeek, setSelectedWeek] = useState(1)
+  const [weekReady, setWeekReady] = useState(false)
+  const [weekError, setWeekError] = useState('')
+  const [preseasonTestMode, setPreseasonTestMode] = useState(false)
 
   // ================================================================
   // PUBLISHED GAMES
   // ================================================================
 
-  const [games, setGames] =
-    useState([])
-
-  const [loadingGames, setLoadingGames] =
-    useState(false)
-
-  const [newGameAway, setNewGameAway] =
-    useState('')
-
-  const [newGameHome, setNewGameHome] =
-    useState('')
-
-  const [
-    newGameSpread,
-    setNewGameSpread,
-  ] = useState('')
-
-  const [
-    newGameKickoff,
-    setNewGameKickoff,
-  ] = useState('')
+  const [games, setGames] = useState([])
+  const [loadingGames, setLoadingGames] = useState(false)
+  const [newGameAway, setNewGameAway] = useState('')
+  const [newGameHome, setNewGameHome] = useState('')
+  const [newGameSpread, setNewGameSpread] = useState('')
+  const [newGameKickoff, setNewGameKickoff] = useState('')
 
   // ================================================================
   // SCHEDULE + DRAFTKINGS PREVIEW
   // ================================================================
 
-  const [
-    schedulePreview,
-    setSchedulePreview,
-  ] = useState([])
-
-  const [
-    scheduleLoading,
-    setScheduleLoading,
-  ] = useState(false)
-
-  const [
-    schedulePublishing,
-    setSchedulePublishing,
-  ] = useState(false)
-
-  const [
-    scheduleMessage,
-    setScheduleMessage,
-  ] = useState('')
-
-  const [
-    scheduleError,
-    setScheduleError,
-  ] = useState('')
-
-  const [
-    scheduleMeta,
-    setScheduleMeta,
-  ] = useState(null)
+  const [schedulePreview, setSchedulePreview] = useState([])
+  const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [schedulePublishing, setSchedulePublishing] = useState(false)
+  const [scheduleMessage, setScheduleMessage] = useState('')
+  const [scheduleError, setScheduleError] = useState('')
+  const [scheduleMeta, setScheduleMeta] = useState(null)
 
   // ================================================================
   // RESULTS PREVIEW
   // ================================================================
 
-  const [
-    resultsPreview,
-    setResultsPreview,
-  ] = useState([])
-
-  const [
-    resultsLoading,
-    setResultsLoading,
-  ] = useState(false)
-
-  const [
-    resultsPublishing,
-    setResultsPublishing,
-  ] = useState(false)
-
-  const [
-    resultsMessage,
-    setResultsMessage,
-  ] = useState('')
-
-  const [
-    resultsError,
-    setResultsError,
-  ] = useState('')
+  const [resultsPreview, setResultsPreview] = useState([])
+  const [resultsLoading, setResultsLoading] = useState(false)
+  const [resultsPublishing, setResultsPublishing] = useState(false)
+  const [resultsMessage, setResultsMessage] = useState('')
+  const [resultsError, setResultsError] = useState('')
 
   // ================================================================
   // USER MANAGEMENT
   // ================================================================
 
-  const [profiles, setProfiles] =
-    useState([])
-
-  const [
-    loadingProfiles,
-    setLoadingProfiles,
-  ] = useState(false)
+  const [profiles, setProfiles] = useState([])
+  const [loadingProfiles, setLoadingProfiles] = useState(false)
 
   // ================================================================
   // VIEW USER PICKS
   // ================================================================
 
-  const [
-    userForPicks,
-    setUserForPicks,
-  ] = useState('')
-
-  const [
-    weekForPicks,
-    setWeekForPicks,
-  ] = useState(1)
-
-  const [
-    userPicks,
-    setUserPicks,
-  ] = useState([])
-
-  const [
-    loadingPicks,
-    setLoadingPicks,
-  ] = useState(false)
+  const [userForPicks, setUserForPicks] = useState('')
+  const [weekForPicks, setWeekForPicks] = useState(1)
+  const [userPicks, setUserPicks] = useState([])
+  const [loadingPicks, setLoadingPicks] = useState(false)
 
   // ================================================================
   // WEEKLY SCORES
   // ================================================================
 
-  const [
-    weeklyScores,
-    setWeeklyScores,
-  ] = useState([])
-
-  const [
-    loadingScores,
-    setLoadingScores,
-  ] = useState(false)
+  const [weeklyScores, setWeeklyScores] = useState([])
+  const [loadingScores, setLoadingScores] = useState(false)
 
   // ================================================================
   // CURRENT WEEK
@@ -249,8 +158,7 @@ export default function Admin() {
 
     async function initializeWeek() {
       try {
-        const currentWeek =
-          await fetchCurrentWeek(supabase)
+        const currentWeek = await fetchCurrentWeek(supabase)
 
         if (!cancelled) {
           setSelectedWeek(currentWeek)
@@ -283,21 +191,15 @@ export default function Admin() {
 
   useEffect(() => {
     if (!authorized || !weekReady) return
-
     loadGames()
-  }, [
-    authorized,
-    selectedWeek,
-    weekReady,
-  ])
+  }, [authorized, selectedWeek, weekReady])
 
   useEffect(() => {
     if (!authorized) return
-
     loadProfiles()
   }, [authorized])
 
-  // Clear previews if commissioner changes week.
+  // Clear previews whenever the active storage week changes.
   useEffect(() => {
     setSchedulePreview([])
     setScheduleMeta(null)
@@ -334,26 +236,19 @@ export default function Admin() {
         <form onSubmit={handlePwSubmit}>
           <label>
             Enter admin password:
-
             <input
               type="password"
               value={enteredPw}
               onChange={event =>
-                setEnteredPw(
-                  event.target.value
-                )
+                setEnteredPw(event.target.value)
               }
-              style={{
-                marginLeft: 8,
-              }}
+              style={{ marginLeft: 8 }}
             />
           </label>
 
           <button
             type="submit"
-            style={{
-              marginLeft: 12,
-            }}
+            style={{ marginLeft: 12 }}
           >
             Unlock
           </button>
@@ -363,33 +258,61 @@ export default function Admin() {
   }
 
   // ================================================================
+  // TEST MODE
+  // ================================================================
+
+  async function handlePreseasonTestMode(enabled) {
+    setSchedulePreview([])
+    setScheduleMeta(null)
+    setScheduleMessage('')
+    setScheduleError('')
+    setResultsPreview([])
+    setResultsMessage('')
+    setResultsError('')
+    setWeeklyScores([])
+
+    setPreseasonTestMode(enabled)
+
+    if (enabled) {
+      setSelectedWeek(PRESEASON_TEST_STORAGE_WEEK)
+      setWeekForPicks(PRESEASON_TEST_STORAGE_WEEK)
+      return
+    }
+
+    try {
+      const currentWeek = await fetchCurrentWeek(supabase)
+      setSelectedWeek(currentWeek)
+      setWeekForPicks(currentWeek)
+    } catch (error) {
+      console.error(
+        'Unable to restore current week:',
+        error
+      )
+      setSelectedWeek(1)
+      setWeekForPicks(1)
+    }
+  }
+
+  // ================================================================
   // LOAD PUBLISHED GAMES
   // ================================================================
 
   async function loadGames() {
     setLoadingGames(true)
 
-    const { data, error } =
-      await supabase
-        .from('games')
-        .select('*')
-        .eq(
-          'week',
-          selectedWeek
-        )
-        .order(
-          'kickoff_time',
-          {
-            ascending: true,
-          }
-        )
+    const { data, error } = await supabase
+      .from('games')
+      .select('*')
+      .eq('week', selectedWeek)
+      .order('kickoff_time', {
+        ascending: true,
+      })
 
     if (error) {
       alert(
         'Error loading games: ' +
           error.message
       )
-
       setGames([])
     } else {
       setGames(data || [])
@@ -405,25 +328,20 @@ export default function Admin() {
   async function loadProfiles() {
     setLoadingProfiles(true)
 
-    const { data, error } =
-      await supabase
-        .from('profiles')
-        .select(
-          'email,username,first_name,last_name'
-        )
-        .order(
-          'username',
-          {
-            ascending: true,
-          }
-        )
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(
+        'email,username,first_name,last_name'
+      )
+      .order('username', {
+        ascending: true,
+      })
 
     if (error) {
       alert(
         'Error loading profiles: ' +
           error.message
       )
-
       setProfiles([])
     } else {
       setProfiles(data || [])
@@ -436,32 +354,30 @@ export default function Admin() {
   // NFL DATA API
   // ================================================================
 
-  async function requestNflData(action) {
-    const response =
-      await fetch(
-        '/api/admin/nfl-data',
-        {
-          method: 'POST',
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-
-          body: JSON.stringify({
-            action,
-            week: selectedWeek,
-            adminPassword:
-              enteredPw,
-          }),
-        }
-      )
+  async function requestNflData(action, extra = {}) {
+    const response = await fetch(
+      '/api/admin/nfl-data',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action,
+          week: selectedWeek,
+          mode: preseasonTestMode
+            ? 'preseason'
+            : 'regular',
+          adminPassword: enteredPw,
+          ...extra,
+        }),
+      }
+    )
 
     let payload = {}
 
     try {
-      payload =
-        await response.json()
+      payload = await response.json()
     } catch {
       // Fallback handled below.
     }
@@ -482,60 +398,44 @@ export default function Admin() {
 
   async function loadSchedulePreview() {
     setScheduleLoading(true)
-
     setScheduleMessage('')
     setScheduleError('')
     setSchedulePreview([])
     setScheduleMeta(null)
 
     try {
-      const payload =
-        await requestNflData(
-          'schedule'
-        )
+      const payload = await requestNflData('schedule')
 
-      const rows =
-        (payload.games || []).map(
-          game => ({
-            ...game,
-
-            home_spread:
-              game.home_spread ??
-              '',
-          })
-        )
+      const rows = (payload.games || []).map(game => ({
+        ...game,
+        home_spread: game.home_spread ?? '',
+      }))
 
       setSchedulePreview(rows)
 
       setScheduleMeta({
-        season:
-          payload.season,
-
-        week:
-          payload.week,
-
-        bookmaker:
-          payload.bookmaker ||
-          'DraftKings',
-
-        quota:
-          payload.quota ||
-          null,
-
+        season: payload.season,
+        week: payload.week,
+        mode: payload.mode || 'regular',
+        bookmaker: payload.bookmaker || 'DraftKings',
+        quota: payload.quota || null,
         fetchedAt:
-          rows[0]
-            ?.fetched_at ||
-          new Date()
-            .toISOString(),
+          rows[0]?.fetched_at ||
+          new Date().toISOString(),
+        testWindow: payload.test_window || null,
       })
 
       if (rows.length === 0) {
         setScheduleError(
-          `No Week ${selectedWeek} games were returned.`
+          preseasonTestMode
+            ? 'No preseason test games were returned.'
+            : `No Week ${selectedWeek} games were returned.`
         )
       } else {
         setScheduleMessage(
-          `Loaded ${rows.length} Week ${selectedWeek} games for review. Nothing has been published yet.`
+          preseasonTestMode
+            ? `Loaded ${rows.length} preseason games for the Aug 20–23 test slate. Nothing has been published yet.`
+            : `Loaded ${rows.length} Week ${selectedWeek} games for review. Nothing has been published yet.`
         )
       }
     } catch (error) {
@@ -557,26 +457,16 @@ export default function Admin() {
   // EDIT SCHEDULE PREVIEW
   // ================================================================
 
-  function updateScheduleRow(
-    index,
-    field,
-    value
-  ) {
-    setSchedulePreview(
-      previous =>
-        previous.map(
-          (
-            row,
-            rowIndex
-          ) =>
-            rowIndex === index
-              ? {
-                  ...row,
-                  [field]:
-                    value,
-                }
-              : row
-        )
+  function updateScheduleRow(index, field, value) {
+    setSchedulePreview(previous =>
+      previous.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              [field]: value,
+            }
+          : row
+      )
     )
 
     setScheduleMessage('')
@@ -584,44 +474,28 @@ export default function Admin() {
   }
 
   function getScheduleIssue(row) {
-    if (
-      !row.away_team?.trim()
-    ) {
+    if (!row.away_team?.trim()) {
       return 'Missing away team'
     }
 
-    if (
-      !row.home_team?.trim()
-    ) {
+    if (!row.home_team?.trim()) {
       return 'Missing home team'
     }
 
     if (
-      row.home_spread ===
-        '' ||
-      row.home_spread ===
-        null ||
-      row.home_spread ===
-        undefined ||
-      !Number.isFinite(
-        Number(
-          row.home_spread
-        )
-      )
+      row.home_spread === '' ||
+      row.home_spread === null ||
+      row.home_spread === undefined ||
+      !Number.isFinite(Number(row.home_spread))
     ) {
       return 'Missing DraftKings spread'
     }
 
-    const kickoff =
-      new Date(
-        row.kickoff_time
-      )
+    const kickoff = new Date(row.kickoff_time)
 
     if (
       !row.kickoff_time ||
-      Number.isNaN(
-        kickoff.getTime()
-      )
+      Number.isNaN(kickoff.getTime())
     ) {
       return 'Missing kickoff time'
     }
@@ -637,148 +511,84 @@ export default function Admin() {
     setScheduleMessage('')
     setScheduleError('')
 
-    if (
-      schedulePreview.length ===
-      0
-    ) {
+    if (schedulePreview.length === 0) {
       setScheduleError(
         'Load the schedule before publishing.'
       )
-
       return
     }
 
-    const problemRows =
-      schedulePreview
-        .map(
-          (
-            row,
-            index
-          ) => ({
-            index,
+    const problemRows = schedulePreview
+      .map((row, index) => ({
+        index,
+        issue: getScheduleIssue(row),
+      }))
+      .filter(item => item.issue)
 
-            issue:
-              getScheduleIssue(
-                row
-              ),
-          })
-        )
-        .filter(
-          item =>
-            item.issue
-        )
-
-    if (
-      problemRows.length >
-      0
-    ) {
+    if (problemRows.length > 0) {
       setScheduleError(
         `Cannot publish yet. ${problemRows.length} game${
-          problemRows.length ===
-          1
-            ? ''
-            : 's'
+          problemRows.length === 1 ? '' : 's'
         } still need attention.`
       )
-
       return
     }
 
-    const confirmed =
-      window.confirm(
-        `Publish Week ${selectedWeek} with the DraftKings lines shown in this preview?\n\nOnce published, these become the official Fantasy Spreads League lines visible to users.`
-      )
+    const publishLabel = preseasonTestMode
+      ? 'the preseason test slate as TEST Week 18'
+      : `Week ${selectedWeek}`
+
+    const confirmed = window.confirm(
+      `Publish ${publishLabel} with the DraftKings lines shown in this preview?\n\nOnce published, these games become visible on Submit Picks.`
+    )
 
     if (!confirmed) return
 
-    setSchedulePublishing(
-      true
-    )
+    setSchedulePublishing(true)
 
     try {
-      // Safeguard:
-      // never silently replace an already-published week.
-      const {
-        data:
-          existingGames,
+      const { data: existingGames, error: existingError } =
+        await supabase
+          .from('games')
+          .select('id')
+          .eq('week', selectedWeek)
+          .limit(1)
 
-        error:
-          existingError,
-      } = await supabase
-        .from('games')
-        .select('id')
-        .eq(
-          'week',
-          selectedWeek
-        )
-        .limit(1)
-
-      if (
-        existingError
-      ) {
+      if (existingError) {
         throw existingError
       }
 
-      if (
-        existingGames &&
-        existingGames.length >
-          0
-      ) {
+      if (existingGames && existingGames.length > 0) {
         throw new Error(
-          `Week ${selectedWeek} already has published games. Automatic republishing is blocked so official lines cannot change accidentally after users have seen them. Use the manual Game Management tools, or Clear Week only if you intentionally want to reset the entire week.`
+          preseasonTestMode
+            ? 'TEST Week 18 already has published games. Clear Week 18 first if you want to restart the preseason test.'
+            : `Week ${selectedWeek} already has published games. Automatic republishing is blocked so official lines cannot change accidentally after users have seen them.`
         )
       }
 
-      const rows =
-        schedulePreview.map(
-          row => ({
-            week:
-              selectedWeek,
+      const rows = schedulePreview.map(row => ({
+        week: selectedWeek,
+        away_team: row.away_team.trim(),
+        home_team: row.home_team.trim(),
+        spread: Number(row.home_spread),
+        kickoff_time: new Date(
+          row.kickoff_time
+        ).toISOString(),
+        odds_event_id: row.api_event_id || null,
+        spread_source: preseasonTestMode
+          ? 'DraftKings Preseason Test'
+          : 'DraftKings',
+        spread_fetched_at:
+          row.fetched_at ||
+          scheduleMeta?.fetchedAt ||
+          new Date().toISOString(),
+      }))
 
-            away_team:
-              row.away_team
-                .trim(),
-
-            home_team:
-              row.home_team
-                .trim(),
-
-            spread:
-              Number(
-                row.home_spread
-              ),
-
-            kickoff_time:
-              new Date(
-                row.kickoff_time
-              ).toISOString(),
-
-            odds_event_id:
-              row.api_event_id ||
-              null,
-
-            spread_source:
-              'DraftKings',
-
-            spread_fetched_at:
-              row.fetched_at ||
-              scheduleMeta
-                ?.fetchedAt ||
-              new Date()
-                .toISOString(),
-          })
-        )
-
-      const {
-        error:
-          insertError,
-      } = await supabase
+      const { error: insertError } = await supabase
         .from('games')
         .insert(rows)
 
-      if (
-        insertError
-      ) {
+      if (insertError) {
         throw insertError
       }
 
@@ -788,7 +598,9 @@ export default function Admin() {
       setScheduleMeta(null)
 
       setScheduleMessage(
-        `✅ Week ${selectedWeek} published successfully. Users can now see these games on Submit Picks.`
+        preseasonTestMode
+          ? '✅ Preseason test slate published as TEST Week 18. Submit Picks, Profile, and Dashboard can now use the test games.'
+          : `✅ Week ${selectedWeek} published successfully. Users can now see these games on Submit Picks.`
       )
     } catch (error) {
       console.error(
@@ -801,9 +613,7 @@ export default function Admin() {
           'Unable to publish the schedule.'
       )
     } finally {
-      setSchedulePublishing(
-        false
-      )
+      setSchedulePublishing(false)
     }
   }
 
@@ -813,204 +623,155 @@ export default function Admin() {
 
   async function loadResultsPreview() {
     setResultsLoading(true)
-
     setResultsMessage('')
     setResultsError('')
     setResultsPreview([])
 
     try {
-      const {
-        data:
-          publishedGames,
-
-        error:
-          gamesError,
-      } = await supabase
-        .from('games')
-        .select(
-          'id,away_team,home_team,kickoff_time'
-        )
-        .eq(
-          'week',
-          selectedWeek
-        )
-        .order(
-          'kickoff_time',
-          {
+      const { data: publishedGames, error: gamesError } =
+        await supabase
+          .from('games')
+          .select(
+            'id,away_team,home_team,kickoff_time,odds_event_id,spread_source'
+          )
+          .eq('week', selectedWeek)
+          .order('kickoff_time', {
             ascending: true,
-          }
-        )
+          })
 
-      if (
-        gamesError
-      ) {
+      if (gamesError) {
         throw gamesError
       }
 
-      if (
-        !publishedGames ||
-        publishedGames.length ===
-          0
-      ) {
+      if (!publishedGames || publishedGames.length === 0) {
         throw new Error(
-          `Week ${selectedWeek} has no published games yet. Publish the weekly schedule before loading results.`
+          preseasonTestMode
+            ? 'TEST Week 18 has no published preseason games yet. Publish the test slate first.'
+            : `Week ${selectedWeek} has no published games yet. Publish the weekly schedule before loading results.`
         )
       }
 
-      const payload =
-        await requestNflData(
-          'results'
-        )
+      const eventIds = publishedGames
+        .map(game => game.odds_event_id)
+        .filter(Boolean)
 
-      const publishedByMatchup =
-        new Map(
-          publishedGames.map(
-            game => [
-              matchupKey(
-                game.away_team,
-                game.home_team
-              ),
+      const payload = await requestNflData(
+        'results',
+        {
+          eventIds,
+        }
+      )
 
-              game,
-            ]
-          )
-        )
+      const publishedByMatchup = new Map(
+        publishedGames.map(game => [
+          matchupKey(
+            game.away_team,
+            game.home_team
+          ),
+          game,
+        ])
+      )
 
-      const matchedGameIds =
-        new Set()
+      const publishedByEventId = new Map(
+        publishedGames
+          .filter(game => game.odds_event_id)
+          .map(game => [
+            String(game.odds_event_id),
+            game,
+          ])
+      )
 
-      const rows =
-        (payload.games || []).map(
-          result => {
-            const key =
-              matchupKey(
-                result.away_team,
-                result.home_team
-              )
+      const matchedGameIds = new Set()
 
-            const publishedGame =
-              publishedByMatchup
-                .get(key)
-
-            if (
-              publishedGame
-            ) {
-              matchedGameIds.add(
-                String(
-                  publishedGame.id
-                )
-              )
-            }
-
-            return {
-              away_team:
-                result.away_team,
-
-              home_team:
-                result.home_team,
-
-              away_score:
-                result.away_score ??
-                '',
-
-              home_score:
-                result.home_score ??
-                '',
-
-              game_id:
-                publishedGame
-                  ?.id ||
-                null,
-
-              kickoff_time:
-                publishedGame
-                  ?.kickoff_time ||
-                null,
-
-              source_missing:
-                false,
-            }
-          }
-        )
-
-      // If a published FSL game is missing
-      // from the source, show it anyway so
-      // commissioner can manually enter the result.
-      publishedGames.forEach(
-        game => {
-          if (
-            matchedGameIds.has(
-              String(
-                game.id
-              )
+      const rows = (payload.games || []).map(result => {
+        const publishedById = result.api_event_id
+          ? publishedByEventId.get(
+              String(result.api_event_id)
             )
-          ) {
-            return
-          }
+          : null
 
-          rows.push({
-            away_team:
-              game.away_team,
+        const publishedByTeams = publishedByMatchup.get(
+          matchupKey(
+            result.away_team,
+            result.home_team
+          )
+        )
 
-            home_team:
-              game.home_team,
+        const publishedGame =
+          publishedById || publishedByTeams
 
-            away_score: '',
-            home_score: '',
-
-            game_id:
-              game.id,
-
-            kickoff_time:
-              game.kickoff_time,
-
-            source_missing:
-              true,
-          })
-        }
-      )
-
-      rows.sort(
-        (a, b) => {
-          const aTime =
-            new Date(
-              a.kickoff_time ||
-                0
-            ).getTime()
-
-          const bTime =
-            new Date(
-              b.kickoff_time ||
-                0
-            ).getTime()
-
-          return (
-            aTime - bTime
+        if (publishedGame) {
+          matchedGameIds.add(
+            String(publishedGame.id)
           )
         }
-      )
 
-      setResultsPreview(
-        rows
-      )
+        return {
+          away_team: result.away_team,
+          home_team: result.home_team,
+          away_score: result.away_score ?? '',
+          home_score: result.home_score ?? '',
+          game_id: publishedGame?.id || null,
+          api_event_id:
+            result.api_event_id ||
+            publishedGame?.odds_event_id ||
+            null,
+          kickoff_time:
+            publishedGame?.kickoff_time || null,
+          completed:
+            result.completed ??
+            result.scores_available ??
+            false,
+          source_missing: false,
+        }
+      })
 
-      const completeCount =
-        rows.filter(
-          row =>
-            isValidScore(
-              row.away_score
-            ) &&
-            isValidScore(
-              row.home_score
-            ) &&
-            Boolean(
-              row.game_id
-            ) &&
-            !row.source_missing
-        ).length
+      // Any published game not returned by the score source is still
+      // shown so the commissioner can see exactly what is missing.
+      publishedGames.forEach(game => {
+        if (
+          matchedGameIds.has(
+            String(game.id)
+          )
+        ) {
+          return
+        }
+
+        rows.push({
+          away_team: game.away_team,
+          home_team: game.home_team,
+          away_score: '',
+          home_score: '',
+          game_id: game.id,
+          api_event_id:
+            game.odds_event_id || null,
+          kickoff_time: game.kickoff_time,
+          completed: false,
+          source_missing: true,
+        })
+      })
+
+      rows.sort((a, b) => {
+        const aTime = new Date(
+          a.kickoff_time || 0
+        ).getTime()
+        const bTime = new Date(
+          b.kickoff_time || 0
+        ).getTime()
+
+        return aTime - bTime
+      })
+
+      setResultsPreview(rows)
+
+      const completeCount = rows.filter(
+        row => !getResultIssue(row)
+      ).length
 
       setResultsMessage(
-        `Loaded Week ${selectedWeek} results for review: ${completeCount}/${rows.length} games currently have complete scores. Nothing has been approved yet.`
+        preseasonTestMode
+          ? `Loaded preseason test results: ${completeCount}/${rows.length} games currently have final scores available. You may approve available finals and refresh again later.`
+          : `Loaded Week ${selectedWeek} results for review: ${completeCount}/${rows.length} games currently have complete scores. Nothing has been approved yet.`
       )
     } catch (error) {
       console.error(
@@ -1023,9 +784,7 @@ export default function Admin() {
           'Unable to load results.'
       )
     } finally {
-      setResultsLoading(
-        false
-      )
+      setResultsLoading(false)
     }
   }
 
@@ -1033,26 +792,18 @@ export default function Admin() {
   // EDIT RESULTS
   // ================================================================
 
-  function updateResultRow(
-    index,
-    field,
-    value
-  ) {
-    setResultsPreview(
-      previous =>
-        previous.map(
-          (
-            row,
-            rowIndex
-          ) =>
-            rowIndex === index
-              ? {
-                  ...row,
-                  [field]:
-                    value,
-                }
-              : row
-        )
+  function updateResultRow(index, field, value) {
+    setResultsPreview(previous =>
+      previous.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              [field]: value,
+              completed: true,
+              source_missing: false,
+            }
+          : row
+      )
     )
 
     setResultsMessage('')
@@ -1061,22 +812,22 @@ export default function Admin() {
 
   function getResultIssue(row) {
     if (!row.game_id) {
-      return (
-        'No matching published game'
-      )
+      return 'No matching published game'
     }
 
     if (
-      !isValidScore(
-        row.away_score
-      ) ||
-      !isValidScore(
-        row.home_score
-      )
+      !isValidScore(row.away_score) ||
+      !isValidScore(row.home_score)
     ) {
-      return (
-        'Final score not available'
-      )
+      return 'Final score not available'
+    }
+
+    if (
+      preseasonTestMode &&
+      row.completed === false &&
+      !row.source_missing
+    ) {
+      return 'Game not final yet'
     }
 
     return ''
@@ -1090,113 +841,85 @@ export default function Admin() {
     setResultsMessage('')
     setResultsError('')
 
-    if (
-      resultsPreview.length ===
-      0
-    ) {
+    if (resultsPreview.length === 0) {
       setResultsError(
         'Load the results before approving them.'
       )
-
       return
     }
 
-    const problemRows =
-      resultsPreview
-        .map(
-          (
-            row,
-            index
-          ) => ({
-            index,
+    const readyRows = resultsPreview.filter(
+      row => !getResultIssue(row)
+    )
 
-            issue:
-              getResultIssue(
-                row
-              ),
-          })
-        )
-        .filter(
-          item =>
-            item.issue
-        )
+    const problemRows = resultsPreview.filter(
+      row => Boolean(getResultIssue(row))
+    )
 
+    if (readyRows.length === 0) {
+      setResultsError(
+        'No final results are ready to approve yet.'
+      )
+      return
+    }
+
+    // Regular season continues to require a complete weekly slate.
+    // Preseason test mode intentionally allows partial approvals so
+    // Thursday/Friday results can be tested before the full weekend ends.
     if (
-      problemRows.length >
-      0
+      !preseasonTestMode &&
+      problemRows.length > 0
     ) {
       setResultsError(
         `Cannot approve results yet. ${problemRows.length} game${
-          problemRows.length ===
-          1
-            ? ''
-            : 's'
+          problemRows.length === 1 ? '' : 's'
         } still need a final score or matchup review.`
       )
-
       return
     }
 
-    const confirmed =
-      window.confirm(
-        `Approve all Week ${selectedWeek} final scores?\n\nThese results will immediately become the official results used by the scoring views.`
-      )
+    const confirmed = window.confirm(
+      preseasonTestMode
+        ? `Approve ${readyRows.length} available preseason test result${
+            readyRows.length === 1 ? '' : 's'
+          }?\n\nYou can reload later to add the remaining final scores.`
+        : `Approve all Week ${selectedWeek} final scores?\n\nThese results will immediately become the official results used by the scoring views.`
+    )
 
     if (!confirmed) return
 
-    setResultsPublishing(
-      true
-    )
+    setResultsPublishing(true)
 
     try {
-      const rows =
-        resultsPreview.map(
-          row => ({
-            week:
-              selectedWeek,
+      const rowsToSave = preseasonTestMode
+        ? readyRows
+        : resultsPreview
 
-            away_team:
-              row.away_team,
+      const rows = rowsToSave.map(row => ({
+        week: selectedWeek,
+        away_team: row.away_team,
+        home_team: row.home_team,
+        away_score: Number(row.away_score),
+        home_score: Number(row.home_score),
+        game_id: row.game_id,
+      }))
 
-            home_team:
-              row.home_team,
-
-            away_score:
-              Number(
-                row.away_score
-              ),
-
-            home_score:
-              Number(
-                row.home_score
-              ),
-
-            game_id:
-              row.game_id,
-          })
-        )
-
-      const {
-        error:
-          upsertError,
-      } = await supabase
+      const { error: upsertError } = await supabase
         .from('results')
-        .upsert(
-          rows,
-          {
-            onConflict:
-              'game_id',
-          }
-        )
+        .upsert(rows, {
+          onConflict: 'game_id',
+        })
 
-      if (
-        upsertError
-      ) {
+      if (upsertError) {
         throw upsertError
       }
 
       setResultsMessage(
-        `✅ Week ${selectedWeek} results approved successfully. You can now click Calculate Scores below to review the week's scoring.`
+        preseasonTestMode
+          ? `✅ Saved ${rows.length} available preseason test result${
+              rows.length === 1 ? '' : 's'
+            }. Reload Results later for any games that are not final yet.`
+          : `✅ Week ${selectedWeek} results approved successfully. You can now click Calculate Scores below to review the week's scoring.`
       )
     } catch (error) {
       console.error(
@@ -1209,9 +932,7 @@ export default function Admin() {
           'Unable to approve results.'
       )
     } finally {
-      setResultsPublishing(
-        false
-      )
+      setResultsPublishing(false)
     }
   }
 
@@ -1220,15 +941,8 @@ export default function Admin() {
   // ================================================================
 
   async function handleAddGame() {
-    const spread =
-      parseFloat(
-        newGameSpread
-      )
-
-    const kickoff =
-      new Date(
-        newGameKickoff
-      )
+    const spread = parseFloat(newGameSpread)
+    const kickoff = new Date(newGameKickoff)
 
     if (
       !newGameAway.trim() ||
@@ -1237,66 +951,36 @@ export default function Admin() {
       alert(
         'Please enter both the away team and home team.'
       )
-
       return
     }
 
-    if (
-      Number.isNaN(
-        spread
-      )
-    ) {
-      alert(
-        'Please enter a valid spread.'
-      )
-
+    if (Number.isNaN(spread)) {
+      alert('Please enter a valid spread.')
       return
     }
 
-    if (
-      Number.isNaN(
-        kickoff.getTime()
-      )
-    ) {
+    if (Number.isNaN(kickoff.getTime())) {
       alert(
         'Please enter a valid kickoff date and time.'
       )
-
       return
     }
 
-    const {
-      error,
-    } = await supabase
+    const { error } = await supabase
       .from('games')
       .insert([
         {
-          week:
-            selectedWeek,
-
-          away_team:
-            newGameAway
-              .trim(),
-
-          home_team:
-            newGameHome
-              .trim(),
-
+          week: selectedWeek,
+          away_team: newGameAway.trim(),
+          home_team: newGameHome.trim(),
           spread,
-
-          kickoff_time:
-            kickoff
-              .toISOString(),
-
-          odds_event_id:
-            null,
-
-          spread_source:
-            'Manual',
-
+          kickoff_time: kickoff.toISOString(),
+          odds_event_id: null,
+          spread_source: preseasonTestMode
+            ? 'Manual Preseason Test'
+            : 'Manual',
           spread_fetched_at:
-            new Date()
-              .toISOString(),
+            new Date().toISOString(),
         },
       ])
 
@@ -1310,7 +994,6 @@ export default function Admin() {
       setNewGameHome('')
       setNewGameSpread('')
       setNewGameKickoff('')
-
       loadGames()
     }
   }
@@ -1319,9 +1002,7 @@ export default function Admin() {
   // DELETE ONE GAME
   // ================================================================
 
-  async function handleDeleteGame(
-    id
-  ) {
+  async function handleDeleteGame(id) {
     if (
       !confirm(
         'Delete this game, its result, and all associated picks?'
@@ -1330,64 +1011,38 @@ export default function Admin() {
       return
     }
 
-    const {
-      error:
-        picksError,
-    } = await supabase
+    const { error: picksError } = await supabase
       .from('picks')
       .delete()
-      .eq(
-        'game_id',
-        id
-      )
+      .eq('game_id', id)
 
-    if (
-      picksError
-    ) {
+    if (picksError) {
       alert(
         'Error deleting associated picks: ' +
           picksError.message
       )
-
       return
     }
 
-    const {
-      error:
-        resultError,
-    } = await supabase
+    const { error: resultError } = await supabase
       .from('results')
       .delete()
-      .eq(
-        'game_id',
-        id
-      )
+      .eq('game_id', id)
 
-    if (
-      resultError
-    ) {
+    if (resultError) {
       alert(
         'Error deleting associated result: ' +
           resultError.message
       )
-
       return
     }
 
-    const {
-      error:
-        gameError,
-    } = await supabase
+    const { error: gameError } = await supabase
       .from('games')
       .delete()
-      .eq(
-        'id',
-        id
-      )
+      .eq('id', id)
 
-    if (
-      gameError
-    ) {
+    if (gameError) {
       alert(
         'Error deleting game: ' +
           gameError.message
@@ -1402,108 +1057,70 @@ export default function Admin() {
   // ================================================================
 
   async function handleClearWeek() {
+    const label = preseasonTestMode
+      ? 'TEST Week 18'
+      : `Week ${selectedWeek}`
+
     if (
       !confirm(
-        `Clear ALL games, results, and picks for Week ${selectedWeek}?\n\nThis should only be used if you intentionally want to reset the entire week.`
+        `Clear ALL games, results, and picks for ${label}?\n\nThis should only be used if you intentionally want to reset the entire week.`
       )
     ) {
       return
     }
 
-    const {
-      data:
-        weekGames,
+    const { data: weekGames, error: gameLookupError } =
+      await supabase
+        .from('games')
+        .select('id')
+        .eq('week', selectedWeek)
 
-      error:
-        gameLookupError,
-    } = await supabase
-      .from('games')
-      .select('id')
-      .eq(
-        'week',
-        selectedWeek
-      )
-
-    if (
-      gameLookupError
-    ) {
+    if (gameLookupError) {
       alert(
         'Error locating week games: ' +
           gameLookupError.message
       )
-
       return
     }
 
-    const gameIds =
-      (weekGames || []).map(
-        game =>
-          game.id
-      )
+    const gameIds = (weekGames || []).map(
+      game => game.id
+    )
 
-    if (
-      gameIds.length >
-      0
-    ) {
-      const {
-        error:
-          picksError,
-      } = await supabase
+    if (gameIds.length > 0) {
+      const { error: picksError } = await supabase
         .from('picks')
         .delete()
-        .in(
-          'game_id',
-          gameIds
-        )
+        .in('game_id', gameIds)
 
-      if (
-        picksError
-      ) {
+      if (picksError) {
         alert(
           'Error clearing picks: ' +
             picksError.message
         )
-
         return
       }
 
-      const {
-        error:
-          resultsError,
-      } = await supabase
+      const { error: resultsError } = await supabase
         .from('results')
         .delete()
-        .in(
-          'game_id',
-          gameIds
-        )
+        .in('game_id', gameIds)
 
-      if (
-        resultsError
-      ) {
+      if (resultsError) {
         alert(
           'Error clearing results: ' +
             resultsError.message
         )
-
         return
       }
     }
 
-    const {
-      error:
-        gamesError,
-    } = await supabase
+    const { error: gamesError } = await supabase
       .from('games')
       .delete()
-      .eq(
-        'week',
-        selectedWeek
-      )
+      .eq('week', selectedWeek)
 
-    if (
-      gamesError
-    ) {
+    if (gamesError) {
       alert(
         'Error clearing games: ' +
           gamesError.message
@@ -1514,9 +1131,7 @@ export default function Admin() {
       setResultsPreview([])
       setWeeklyScores([])
 
-      alert(
-        `Week ${selectedWeek} has been cleared.`
-      )
+      alert(`${label} has been cleared.`)
     }
   }
 
@@ -1524,42 +1139,25 @@ export default function Admin() {
   // DELETE USER
   // ================================================================
 
-  async function handleDeleteUser(
-    email
-  ) {
-    if (
-      !confirm(
-        `Delete user ${email}?`
-      )
-    ) {
+  async function handleDeleteUser(email) {
+    if (!confirm(`Delete user ${email}?`)) {
       return
     }
 
-    const response =
-      await fetch(
-        '/api/delete-profile',
-        {
-          method:
-            'POST',
+    const response = await fetch(
+      '/api/delete-profile',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      }
+    )
 
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
+    const result = await response.json()
 
-          body:
-            JSON.stringify({
-              email,
-            }),
-        }
-      )
-
-    const result =
-      await response.json()
-
-    if (
-      result.error
-    ) {
+    if (result.error) {
       alert(
         'Error deleting user: ' +
           result.error
@@ -1574,24 +1172,14 @@ export default function Admin() {
   // ================================================================
 
   async function loadUserPicks() {
-    if (
-      !userForPicks
-    ) {
-      alert(
-        'Please select a user'
-      )
-
+    if (!userForPicks) {
+      alert('Please select a user')
       return
     }
 
-    setLoadingPicks(
-      true
-    )
+    setLoadingPicks(true)
 
-    const {
-      data,
-      error,
-    } = await supabase
+    const { data, error } = await supabase
       .from('picks')
       .select(`
         id,
@@ -1604,80 +1192,46 @@ export default function Admin() {
           week
         )
       `)
-      .eq(
-        'user_email',
-        userForPicks
-      )
-      .eq(
-        'games.week',
-        weekForPicks
-      )
-      .order(
-        'kickoff_time',
-        {
-          foreignTable:
-            'games',
-
-          ascending:
-            true,
-        }
-      )
+      .eq('user_email', userForPicks)
+      .eq('games.week', weekForPicks)
+      .order('kickoff_time', {
+        foreignTable: 'games',
+        ascending: true,
+      })
 
     if (error) {
       alert(
         'Error loading picks: ' +
           error.message
       )
-
       setUserPicks([])
-      setLoadingPicks(
-        false
-      )
-
+      setLoadingPicks(false)
       return
     }
 
-    const valid =
-      (data || []).filter(
-        pick =>
-          pick.games &&
-          pick.games
-            .kickoff_time
-      )
-
-    setUserPicks(
-      valid
+    const valid = (data || []).filter(
+      pick =>
+        pick.games &&
+        pick.games.kickoff_time
     )
 
-    setLoadingPicks(
-      false
-    )
+    setUserPicks(valid)
+    setLoadingPicks(false)
   }
 
   // ================================================================
   // DELETE PICK
   // ================================================================
 
-  async function handleDeletePick(
-    pickId
-  ) {
-    if (
-      !confirm(
-        'Delete this pick?'
-      )
-    ) {
+  async function handleDeletePick(pickId) {
+    if (!confirm('Delete this pick?')) {
       return
     }
 
-    const {
-      error,
-    } = await supabase
+    const { error } = await supabase
       .from('picks')
       .delete()
-      .eq(
-        'id',
-        pickId
-      )
+      .eq('id', pickId)
 
     if (error) {
       alert(
@@ -1694,331 +1248,178 @@ export default function Admin() {
   // ================================================================
 
   async function calculateScores() {
-    setLoadingScores(
-      true
-    )
+    setLoadingScores(true)
 
     try {
-      const {
-        data:
-          profileRows,
+      const { data: profileRows, error: profileError } =
+        await supabase
+          .from('profiles')
+          .select('email,username')
 
-        error:
-          profileError,
-      } = await supabase
-        .from('profiles')
-        .select(
-          'email,username'
-        )
-
-      if (
-        profileError
-      ) {
+      if (profileError) {
         throw profileError
       }
 
-      const {
-        data:
-          results,
+      const { data: results, error: resultsError } =
+        await supabase
+          .from('results')
+          .select(
+            'home_team,away_team,home_score,away_score,week'
+          )
+          .eq('week', selectedWeek)
 
-        error:
-          resultsError,
-      } = await supabase
-        .from('results')
-        .select(
-          'home_team,away_team,home_score,away_score,week'
-        )
-        .eq(
-          'week',
-          selectedWeek
-        )
-
-      if (
-        resultsError
-      ) {
+      if (resultsError) {
         throw resultsError
       }
 
-      const normalize =
-        value =>
-          (
-            value ??
-            ''
-          ).trim()
+      const normalize = value =>
+        (value ?? '').trim()
 
-      const {
-        data:
-          totals,
+      const { data: totals, error: totalsError } =
+        await supabase
+          .from('picks')
+          .select(
+            'user_email,games!inner(week)'
+          )
+          .eq(
+            'games.week',
+            selectedWeek
+          )
 
-        error:
-          totalsError,
-      } = await supabase
-        .from('picks')
-        .select(
-          'user_email,games!inner(week)'
-        )
-        .eq(
-          'games.week',
-          selectedWeek
-        )
-
-      if (
-        totalsError
-      ) {
+      if (totalsError) {
         throw totalsError
       }
 
-      const weeklyTotalByUser =
-        {}
+      const weeklyTotalByUser = {}
 
-      for (
-        const row of
-          totals ||
-        []
-      ) {
-        weeklyTotalByUser[
-          row.user_email
-        ] =
-          (
-            weeklyTotalByUser[
-              row.user_email
-            ] ||
-            0
-          ) + 1
+      for (const row of totals || []) {
+        weeklyTotalByUser[row.user_email] =
+          (weeklyTotalByUser[row.user_email] || 0) + 1
       }
 
-      const {
-        data:
-          picks,
-
-        error:
-          picksError,
-      } = await supabase
-        .from('picks')
-        .select(`
-          user_email,
-          selected_team,
-          is_lock,
-          games!inner (
-            home_team,
-            away_team,
-            spread,
-            week
+      const { data: picks, error: picksError } =
+        await supabase
+          .from('picks')
+          .select(`
+            user_email,
+            selected_team,
+            is_lock,
+            games!inner (
+              home_team,
+              away_team,
+              spread,
+              week
+            )
+          `)
+          .eq(
+            'games.week',
+            selectedWeek
           )
-        `)
-        .eq(
-          'games.week',
-          selectedWeek
-        )
 
-      if (
-        picksError
-      ) {
+      if (picksError) {
         throw picksError
       }
 
       const stats = {}
 
-      profileRows.forEach(
-        profile => {
-          stats[
-            profile.email
-          ] = {
-            email:
-              profile.email,
-
-            weeklyPoints:
-              0,
-
-            correct:
-              0,
-
-            lockCorrect:
-              0,
-
-            lockIncorrect:
-              0,
-
-            perfectBonus:
-              0,
-
-            weeklyTotal:
-              weeklyTotalByUser[
-                profile.email
-              ] ||
-              0,
-          }
+      profileRows.forEach(profile => {
+        stats[profile.email] = {
+          email: profile.email,
+          weeklyPoints: 0,
+          correct: 0,
+          lockCorrect: 0,
+          lockIncorrect: 0,
+          perfectBonus: 0,
+          weeklyTotal:
+            weeklyTotalByUser[
+              profile.email
+            ] || 0,
         }
-      )
+      })
 
-      for (
-        const pick of
-          picks ||
-        []
-      ) {
-        const game =
-          pick.games
-
+      for (const pick of picks || []) {
+        const game = pick.games
         if (!game) continue
 
-        const user =
-          stats[
-            pick.user_email
-          ]
-
+        const user = stats[pick.user_email]
         if (!user) continue
 
-        const result =
-          results.find(
-            row =>
-              row.week ===
-                game.week &&
-
-              normalize(
-                row.home_team
-              ) ===
-                normalize(
-                  game.home_team
-                ) &&
-
-              normalize(
-                row.away_team
-              ) ===
-                normalize(
-                  game.away_team
-                )
-          )
+        const result = results.find(
+          row =>
+            row.week === game.week &&
+            normalize(row.home_team) ===
+              normalize(game.home_team) &&
+            normalize(row.away_team) ===
+              normalize(game.away_team)
+        )
 
         if (!result) continue
 
-        const spread =
-          Number(
-            game.spread
-          )
+        const spread = Number(game.spread)
 
         const adjustedHomeScore =
-          Number(
-            result.home_score
-          ) +
-          spread
+          Number(result.home_score) + spread
 
-        const awayScore =
-          Number(
-            result.away_score
-          )
+        const awayScore = Number(
+          result.away_score
+        )
 
         // Preserve existing FSL push behavior.
-        if (
-          adjustedHomeScore ===
-          awayScore
-        ) {
-          if (
-            pick.is_lock
-          ) {
-            user.lockIncorrect +=
-              1
-
-            user.weeklyPoints -=
-              2
+        if (adjustedHomeScore === awayScore) {
+          if (pick.is_lock) {
+            user.lockIncorrect += 1
+            user.weeklyPoints -= 2
           }
 
           continue
         }
 
         const homeCover =
-          adjustedHomeScore >
-          awayScore
+          adjustedHomeScore > awayScore
 
-        const winner =
-          homeCover
-            ? normalize(
-                result.home_team
-              )
-            : normalize(
-                result.away_team
-              )
+        const winner = homeCover
+          ? normalize(result.home_team)
+          : normalize(result.away_team)
 
-        const picked =
-          normalize(
-            pick.selected_team
-          )
-
-        if (
-          picked === winner
-        ) {
-          user.correct +=
-            1
-
-          user.weeklyPoints +=
-            1
-
-          if (
-            pick.is_lock
-          ) {
-            user.lockCorrect +=
-              1
-
-            user.weeklyPoints +=
-              2
-          }
-        } else if (
-          pick.is_lock
-        ) {
-          user.lockIncorrect +=
-            1
-
-          user.weeklyPoints -=
-            2
-        }
-      }
-
-      for (
-        const user of
-          Object.values(
-            stats
-          )
-      ) {
-        if (
-          user.weeklyTotal >
-            0 &&
-          user.correct ===
-            user.weeklyTotal
-        ) {
-          user.perfectBonus =
-            3
-
-          user.weeklyPoints +=
-            3
-        }
-      }
-
-      const rows =
-        Object.values(
-          stats
+        const picked = normalize(
+          pick.selected_team
         )
-          .filter(
-            user =>
-              user.weeklyTotal >
-              0
-          )
-          .sort(
-            (
-              a,
-              b
-            ) =>
-              b.weeklyPoints -
-                a.weeklyPoints ||
-              b.correct -
-                a.correct
-          )
 
-      setWeeklyScores(
-        rows
-      )
+        if (picked === winner) {
+          user.correct += 1
+          user.weeklyPoints += 1
+
+          if (pick.is_lock) {
+            user.lockCorrect += 1
+            user.weeklyPoints += 2
+          }
+        } else if (pick.is_lock) {
+          user.lockIncorrect += 1
+          user.weeklyPoints -= 2
+        }
+      }
+
+      for (const user of Object.values(stats)) {
+        if (
+          user.weeklyTotal > 0 &&
+          user.correct === user.weeklyTotal
+        ) {
+          user.perfectBonus = 3
+          user.weeklyPoints += 3
+        }
+      }
+
+      const rows = Object.values(stats)
+        .filter(user => user.weeklyTotal > 0)
+        .sort(
+          (a, b) =>
+            b.weeklyPoints - a.weeklyPoints ||
+            b.correct - a.correct
+        )
+
+      setWeeklyScores(rows)
     } catch (error) {
-      console.error(
-        error
-      )
+      console.error(error)
 
       alert(
         'Error calculating scores: ' +
@@ -2027,42 +1428,24 @@ export default function Admin() {
 
       setWeeklyScores([])
     } finally {
-      setLoadingScores(
-        false
-      )
+      setLoadingScores(false)
     }
   }
 
-  // ================================================================
-  // READY COUNTS
-  // ================================================================
+  const scheduleReadyCount = schedulePreview.filter(
+    row => !getScheduleIssue(row)
+  ).length
 
-  const scheduleReadyCount =
-    schedulePreview.filter(
-      row =>
-        !getScheduleIssue(
-          row
-        )
-    ).length
+  const resultsReadyCount = resultsPreview.filter(
+    row => !getResultIssue(row)
+  ).length
 
-  const resultsReadyCount =
-    resultsPreview.filter(
-      row =>
-        !getResultIssue(
-          row
-        )
-    ).length
-
-  // ================================================================
-  // RENDER
-  // ================================================================
+  const dataHeading = preseasonTestMode
+    ? '🧪 Preseason Test Mode — stored as Week 18'
+    : `Weekly NFL Data — Week ${selectedWeek}`
 
   return (
-    <div
-      style={{
-        padding: 20,
-      }}
-    >
+    <div style={{ padding: 20 }}>
       <h1>Admin</h1>
 
       <p>
@@ -2072,12 +1455,7 @@ export default function Admin() {
       </p>
 
       {weekError && (
-        <p
-          style={{
-            color:
-              '#a67c00',
-          }}
-        >
+        <p style={{ color: '#a67c00' }}>
           ⚠️ {weekError}
         </p>
       )}
@@ -2086,75 +1464,75 @@ export default function Admin() {
       {/* AUTOMATED NFL DATA */}
       {/* ========================================================= */}
 
-      <section
-        className="admin-panel"
-      >
-        <h2>
-          Weekly NFL Data — Week{' '}
-          {selectedWeek}
-        </h2>
+      <section className="admin-panel">
+        <h2>{dataHeading}</h2>
 
-        <p
-          className="panel-note"
-        >
+        <p className="panel-note">
           Load data into a private commissioner preview first.
           Nothing becomes visible to league users until you approve it.
         </p>
 
-        <div
-          className="week-row"
-        >
+        <div className="test-mode-box">
+          <label className="test-mode-label">
+            <input
+              type="checkbox"
+              checked={preseasonTestMode}
+              onChange={event =>
+                handlePreseasonTestMode(
+                  event.target.checked
+                )
+              }
+            />
+
+            <strong>
+              🧪 Preseason Test Mode
+            </strong>
+          </label>
+
+          <p className="test-mode-copy">
+            {preseasonTestMode
+              ? 'ACTIVE: Loads the Aug. 20–23 NFL preseason slate from The Odds API, uses DraftKings spreads, and publishes the test games as Week 18. Week 18 allows any five picks, making it ideal for end-to-end testing. Clear Week 18 when testing is finished.'
+              : 'Off: normal 2026 regular-season schedule and result workflow.'}
+          </p>
+        </div>
+
+        <div className="week-row">
           <label>
             Week:&nbsp;
 
             <select
-              value={
-                selectedWeek
-              }
-              onChange={
-                event =>
-                  setSelectedWeek(
-                    parseInt(
-                      event.target
-                        .value,
-                      10
-                    )
+              value={selectedWeek}
+              onChange={event =>
+                setSelectedWeek(
+                  parseInt(
+                    event.target.value,
+                    10
                   )
+                )
               }
               disabled={
-                !weekReady
+                !weekReady ||
+                preseasonTestMode
               }
             >
               {Array.from(
-                {
-                  length: 18,
-                },
-                (
-                  _,
-                  index
-                ) =>
-                  index + 1
-              ).map(
-                week => (
-                  <option
-                    key={
-                      week
-                    }
-                    value={
-                      week
-                    }
-                  >
-                    {week}
-                  </option>
-                )
-              )}
+                { length: 18 },
+                (_, index) => index + 1
+              ).map(week => (
+                <option
+                  key={week}
+                  value={week}
+                >
+                  {week}
+                </option>
+              ))}
             </select>
           </label>
 
-          <small
-            className="muted"
-          >
-            Automatically opens to the current week.
+          <small className="muted">
+            {preseasonTestMode
+              ? 'Locked to Week 18 while test mode is active.'
+              : 'Automatically opens to the current week.'}
           </small>
         </div>
 
@@ -2162,16 +1540,15 @@ export default function Admin() {
         {/* SCHEDULE + SPREADS */}
         {/* ===================================================== */}
 
-        <div
-          className="data-block"
-        >
+        <div className="data-block">
           <h3>
-            1. Schedule + DraftKings Spreads
+            1.{' '}
+            {preseasonTestMode
+              ? 'Preseason Schedule + DraftKings Spreads'
+              : 'Schedule + DraftKings Spreads'}
           </h3>
 
-          <p
-            className="panel-note"
-          >
+          <p className="panel-note">
             DraftKings is the official automated line source.
             The spread shown here is always the home-team spread.
             You may edit any value before publishing.
@@ -2179,9 +1556,7 @@ export default function Admin() {
 
           <button
             className="admin-button load-button"
-            onClick={
-              loadSchedulePreview
-            }
+            onClick={loadSchedulePreview}
             disabled={
               scheduleLoading ||
               schedulePublishing
@@ -2189,19 +1564,22 @@ export default function Admin() {
           >
             {scheduleLoading
               ? 'Loading Schedule…'
-              : `Load Week ${selectedWeek} Schedule + DraftKings Spreads`}
+              : preseasonTestMode
+                ? 'Load Preseason Test Schedule + DraftKings Spreads'
+                : `Load Week ${selectedWeek} Schedule + DraftKings Spreads`}
           </button>
 
           {scheduleMeta && (
-            <div
-              className="source-summary"
-            >
+            <div className="source-summary">
               <strong>
                 Source:
               </strong>{' '}
-              {
-                scheduleMeta.bookmaker
-              }
+
+              {scheduleMeta.bookmaker}
+
+              {preseasonTestMode
+                ? ' / NFL Preseason'
+                : ' / 2026 NFL Regular Season'}
 
               {' • '}
 
@@ -2210,14 +1588,10 @@ export default function Admin() {
               </strong>{' '}
 
               {new Date(
-                scheduleMeta
-                  .fetchedAt
+                scheduleMeta.fetchedAt
               ).toLocaleString()}
 
-              {scheduleMeta
-                .quota
-                ?.remaining !=
-                null && (
+              {scheduleMeta.quota?.remaining != null && (
                 <>
                   {' • '}
 
@@ -2225,97 +1599,53 @@ export default function Admin() {
                     Odds API credits remaining:
                   </strong>{' '}
 
-                  {
-                    scheduleMeta
-                      .quota
-                      .remaining
-                  }
+                  {scheduleMeta.quota.remaining}
                 </>
               )}
             </div>
           )}
 
           {scheduleMessage && (
-            <div
-              className="message success-lite"
-            >
-              {
-                scheduleMessage
-              }
+            <div className="message success-lite">
+              {scheduleMessage}
             </div>
           )}
 
           {scheduleError && (
-            <div
-              className="message error-lite"
-            >
-              {
-                scheduleError
-              }
+            <div className="message error-lite">
+              {scheduleError}
             </div>
           )}
 
-          {schedulePreview.length >
-            0 && (
+          {schedulePreview.length > 0 && (
             <>
               <p>
                 Ready to publish:{' '}
 
                 <strong>
-                  {
-                    scheduleReadyCount
-                  }
-                  /
-                  {
-                    schedulePreview.length
-                  }
+                  {scheduleReadyCount}/
+                  {schedulePreview.length}
                 </strong>
               </p>
 
-              <div
-                className="table-scroll"
-              >
-                <table
-                  className="review-table"
-                >
+              <div className="table-scroll">
+                <table className="review-table">
                   <thead>
                     <tr>
-                      <th>
-                        Away
-                      </th>
-
-                      <th>
-                        Home
-                      </th>
-
-                      <th>
-                        Home Spread
-                      </th>
-
-                      <th>
-                        Kickoff
-                      </th>
-
-                      <th>
-                        Source
-                      </th>
-
-                      <th>
-                        Status
-                      </th>
+                      <th>Away</th>
+                      <th>Home</th>
+                      <th>Home Spread</th>
+                      <th>Kickoff</th>
+                      <th>Source</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
 
                   <tbody>
                     {schedulePreview.map(
-                      (
-                        row,
-                        index
-                      ) => {
+                      (row, index) => {
                         const issue =
-                          getScheduleIssue(
-                            row
-                          )
+                          getScheduleIssue(row)
 
                         return (
                           <tr
@@ -2331,14 +1661,12 @@ export default function Admin() {
                                 value={
                                   row.away_team
                                 }
-                                onChange={
-                                  event =>
-                                    updateScheduleRow(
-                                      index,
-                                      'away_team',
-                                      event.target
-                                        .value
-                                    )
+                                onChange={event =>
+                                  updateScheduleRow(
+                                    index,
+                                    'away_team',
+                                    event.target.value
+                                  )
                                 }
                               />
                             </td>
@@ -2349,14 +1677,12 @@ export default function Admin() {
                                 value={
                                   row.home_team
                                 }
-                                onChange={
-                                  event =>
-                                    updateScheduleRow(
-                                      index,
-                                      'home_team',
-                                      event.target
-                                        .value
-                                    )
+                                onChange={event =>
+                                  updateScheduleRow(
+                                    index,
+                                    'home_team',
+                                    event.target.value
+                                  )
                                 }
                               />
                             </td>
@@ -2369,14 +1695,12 @@ export default function Admin() {
                                 value={
                                   row.home_spread
                                 }
-                                onChange={
-                                  event =>
-                                    updateScheduleRow(
-                                      index,
-                                      'home_spread',
-                                      event.target
-                                        .value
-                                    )
+                                onChange={event =>
+                                  updateScheduleRow(
+                                    index,
+                                    'home_spread',
+                                    event.target.value
+                                  )
                                 }
                               />
                             </td>
@@ -2390,38 +1714,31 @@ export default function Admin() {
                                     row.kickoff_time
                                   )
                                 }
-                                onChange={
-                                  event =>
-                                    updateScheduleRow(
-                                      index,
-                                      'kickoff_time',
-                                      localDateTimeInputToIso(
-                                        event.target
-                                          .value
-                                      )
+                                onChange={event =>
+                                  updateScheduleRow(
+                                    index,
+                                    'kickoff_time',
+                                    localDateTimeInputToIso(
+                                      event.target.value
                                     )
+                                  )
                                 }
                               />
                             </td>
 
                             <td>
-                              DraftKings
+                              {preseasonTestMode
+                                ? 'DraftKings Test'
+                                : 'DraftKings'}
                             </td>
 
                             <td>
                               {issue ? (
-                                <span
-                                  className="status-bad"
-                                >
-                                  ⚠️{' '}
-                                  {
-                                    issue
-                                  }
+                                <span className="status-bad">
+                                  ⚠️ {issue}
                                 </span>
                               ) : (
-                                <span
-                                  className="status-good"
-                                >
+                                <span className="status-good">
                                   ✓ Ready
                                 </span>
                               )}
@@ -2436,9 +1753,7 @@ export default function Admin() {
 
               <button
                 className="admin-button approve-button"
-                onClick={
-                  publishSchedule
-                }
+                onClick={publishSchedule}
                 disabled={
                   schedulePublishing ||
                   scheduleReadyCount !==
@@ -2447,7 +1762,9 @@ export default function Admin() {
               >
                 {schedulePublishing
                   ? 'Publishing…'
-                  : `Approve & Publish Week ${selectedWeek}`}
+                  : preseasonTestMode
+                    ? 'Approve & Publish Preseason Test as Week 18'
+                    : `Approve & Publish Week ${selectedWeek}`}
               </button>
             </>
           )}
@@ -2457,25 +1774,23 @@ export default function Admin() {
         {/* RESULTS */}
         {/* ===================================================== */}
 
-        <div
-          className="data-block"
-        >
+        <div className="data-block">
           <h3>
-            2. Final Results
+            2.{' '}
+            {preseasonTestMode
+              ? 'Preseason Test Results'
+              : 'Final Results'}
           </h3>
 
-          <p
-            className="panel-note"
-          >
-            Load final scores after the week's games are complete.
-            Review every score before approving it.
+          <p className="panel-note">
+            {preseasonTestMode
+              ? 'The Odds API returns live and recently completed preseason scores. You can approve available final scores, then reload later as the rest of the games finish.'
+              : "Load final scores after the week's games are complete. Review every score before approving it."}
           </p>
 
           <button
             className="admin-button load-button"
-            onClick={
-              loadResultsPreview
-            }
+            onClick={loadResultsPreview}
             disabled={
               resultsLoading ||
               resultsPublishing
@@ -2483,86 +1798,51 @@ export default function Admin() {
           >
             {resultsLoading
               ? 'Loading Results…'
-              : `Load Week ${selectedWeek} Results`}
+              : preseasonTestMode
+                ? 'Load Preseason Test Results'
+                : `Load Week ${selectedWeek} Results`}
           </button>
 
           {resultsMessage && (
-            <div
-              className="message success-lite"
-            >
-              {
-                resultsMessage
-              }
+            <div className="message success-lite">
+              {resultsMessage}
             </div>
           )}
 
           {resultsError && (
-            <div
-              className="message error-lite"
-            >
-              {
-                resultsError
-              }
+            <div className="message error-lite">
+              {resultsError}
             </div>
           )}
 
-          {resultsPreview.length >
-            0 && (
+          {resultsPreview.length > 0 && (
             <>
               <p>
                 Ready to approve:{' '}
 
                 <strong>
-                  {
-                    resultsReadyCount
-                  }
-                  /
-                  {
-                    resultsPreview.length
-                  }
+                  {resultsReadyCount}/
+                  {resultsPreview.length}
                 </strong>
               </p>
 
-              <div
-                className="table-scroll"
-              >
-                <table
-                  className="review-table results-table"
-                >
+              <div className="table-scroll">
+                <table className="review-table results-table">
                   <thead>
                     <tr>
-                      <th>
-                        Away
-                      </th>
-
-                      <th>
-                        Away Score
-                      </th>
-
-                      <th>
-                        Home
-                      </th>
-
-                      <th>
-                        Home Score
-                      </th>
-
-                      <th>
-                        Status
-                      </th>
+                      <th>Away</th>
+                      <th>Away Score</th>
+                      <th>Home</th>
+                      <th>Home Score</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
 
                   <tbody>
                     {resultsPreview.map(
-                      (
-                        row,
-                        index
-                      ) => {
+                      (row, index) => {
                         const issue =
-                          getResultIssue(
-                            row
-                          )
+                          getResultIssue(row)
 
                         return (
                           <tr
@@ -2572,9 +1852,7 @@ export default function Admin() {
                             }
                           >
                             <td>
-                              {
-                                row.away_team
-                              }
+                              {row.away_team}
                             </td>
 
                             <td>
@@ -2586,22 +1864,18 @@ export default function Admin() {
                                 value={
                                   row.away_score
                                 }
-                                onChange={
-                                  event =>
-                                    updateResultRow(
-                                      index,
-                                      'away_score',
-                                      event.target
-                                        .value
-                                    )
+                                onChange={event =>
+                                  updateResultRow(
+                                    index,
+                                    'away_score',
+                                    event.target.value
+                                  )
                                 }
                               />
                             </td>
 
                             <td>
-                              {
-                                row.home_team
-                              }
+                              {row.home_team}
                             </td>
 
                             <td>
@@ -2613,40 +1887,28 @@ export default function Admin() {
                                 value={
                                   row.home_score
                                 }
-                                onChange={
-                                  event =>
-                                    updateResultRow(
-                                      index,
-                                      'home_score',
-                                      event.target
-                                        .value
-                                    )
+                                onChange={event =>
+                                  updateResultRow(
+                                    index,
+                                    'home_score',
+                                    event.target.value
+                                  )
                                 }
                               />
                             </td>
 
                             <td>
                               {issue ? (
-                                <span
-                                  className="status-bad"
-                                >
-                                  ⚠️{' '}
-                                  {
-                                    issue
-                                  }
+                                <span className="status-bad">
+                                  ⚠️ {issue}
                                 </span>
                               ) : row.source_missing ? (
-                                <span
-                                  className="status-manual"
-                                >
-                                  ✓ Ready
-                                  (manual)
+                                <span className="status-manual">
+                                  ✓ Ready (manual)
                                 </span>
                               ) : (
-                                <span
-                                  className="status-good"
-                                >
-                                  ✓ Ready
+                                <span className="status-good">
+                                  ✓ Final
                                 </span>
                               )}
                             </td>
@@ -2660,18 +1922,26 @@ export default function Admin() {
 
               <button
                 className="admin-button approve-button"
-                onClick={
-                  publishResults
-                }
+                onClick={publishResults}
                 disabled={
                   resultsPublishing ||
-                  resultsReadyCount !==
-                    resultsPreview.length
+                  resultsReadyCount === 0 ||
+                  (
+                    !preseasonTestMode &&
+                    resultsReadyCount !==
+                      resultsPreview.length
+                  )
                 }
               >
                 {resultsPublishing
                   ? 'Approving…'
-                  : `Approve Week ${selectedWeek} Results`}
+                  : preseasonTestMode
+                    ? `Approve ${resultsReadyCount} Available Test Result${
+                        resultsReadyCount === 1
+                          ? ''
+                          : 's'
+                      }`
+                    : `Approve Week ${selectedWeek} Results`}
               </button>
             </>
           )}
@@ -2682,40 +1952,36 @@ export default function Admin() {
       {/* PUBLISHED GAME MANAGEMENT */}
       {/* ========================================================= */}
 
-      <section
-        style={{
-          marginTop: 40,
-        }}
-      >
+      <section style={{ marginTop: 40 }}>
         <h2>
           Published Game Management
           {' '}
-          (Week{' '}
-          {selectedWeek})
+          (Week {selectedWeek})
         </h2>
 
-        <div
-          style={{
-            marginBottom: 12,
-          }}
-        >
+        {preseasonTestMode && (
+          <div className="message test-warning">
+            🧪 You are viewing TEST Week 18. When preseason testing is complete,
+            use <strong>Clear Week</strong> below to remove all test games,
+            test results, and test picks before the regular season reaches Week 18.
+          </div>
+        )}
+
+        <div style={{ marginBottom: 12 }}>
           <button
-            onClick={
-              handleClearWeek
-            }
-            disabled={
-              !weekReady
-            }
+            onClick={handleClearWeek}
+            disabled={!weekReady}
             className="danger-button"
           >
-            Clear Week
+            {preseasonTestMode
+              ? 'Clear TEST Week 18'
+              : 'Clear Week'}
           </button>
 
           <small
             style={{
               marginLeft: 10,
-              color:
-                '#64748b',
+              color: '#64748b',
             }}
           >
             Emergency/manual controls. Clear Week deletes that week's
@@ -2723,118 +1989,74 @@ export default function Admin() {
           </small>
         </div>
 
-        {!weekReady ||
-        loadingGames ? (
+        {!weekReady || loadingGames ? (
           <p>
-            Loading Week{' '}
-            {selectedWeek}{' '}
-            games…
+            Loading Week {selectedWeek} games…
           </p>
         ) : (
-          <div
-            className="table-scroll"
-          >
-            <table
-              className="review-table"
-            >
+          <div className="table-scroll">
+            <table className="review-table">
               <thead>
                 <tr>
-                  <th>
-                    Away
-                  </th>
-
-                  <th>
-                    Home
-                  </th>
-
-                  <th>
-                    Home Spread
-                  </th>
-
-                  <th>
-                    Kickoff
-                  </th>
-
-                  <th>
-                    Source
-                  </th>
-
-                  <th>
-                    Actions
-                  </th>
+                  <th>Away</th>
+                  <th>Home</th>
+                  <th>Home Spread</th>
+                  <th>Kickoff</th>
+                  <th>Source</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
 
               <tbody>
-                {games.map(
-                  game => (
-                    <tr
-                      key={
-                        game.id
-                      }
-                    >
-                      <td>
-                        {
-                          game.away_team
+                {games.map(game => (
+                  <tr key={game.id}>
+                    <td>
+                      {game.away_team}
+                    </td>
+
+                    <td>
+                      {game.home_team}
+                    </td>
+
+                    <td className="center">
+                      {formatSpread(
+                        game.spread
+                      )}
+                    </td>
+
+                    <td>
+                      {new Date(
+                        game.kickoff_time
+                      ).toLocaleString()}
+                    </td>
+
+                    <td className="center">
+                      {game.spread_source || '—'}
+                    </td>
+
+                    <td className="center">
+                      <button
+                        onClick={() =>
+                          handleDeleteGame(
+                            game.id
+                          )
                         }
-                      </td>
-
-                      <td>
-                        {
-                          game.home_team
-                        }
-                      </td>
-
-                      <td
-                        className="center"
+                        className="small-danger-button"
                       >
-                        {formatSpread(
-                          game.spread
-                        )}
-                      </td>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
 
-                      <td>
-                        {new Date(
-                          game.kickoff_time
-                        ).toLocaleString()}
-                      </td>
-
-                      <td
-                        className="center"
-                      >
-                        {game.spread_source ||
-                          '—'}
-                      </td>
-
-                      <td
-                        className="center"
-                      >
-                        <button
-                          onClick={() =>
-                            handleDeleteGame(
-                              game.id
-                            )
-                          }
-                          className="small-danger-button"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                )}
-
-                {games.length ===
-                  0 && (
+                {games.length === 0 && (
                   <tr>
                     <td
                       colSpan={6}
                       className="center"
                     >
                       No published games found for Week{' '}
-                      {
-                        selectedWeek
-                      }.
+                      {selectedWeek}.
                     </td>
                   </tr>
                 )}
@@ -2843,38 +2065,28 @@ export default function Admin() {
           </div>
         )}
 
-        <div
-          className="manual-game-row"
-        >
+        <div className="manual-game-row">
           <strong>
             Manual fallback:
           </strong>
 
           <input
             placeholder="Away Team"
-            value={
-              newGameAway
-            }
-            onChange={
-              event =>
-                setNewGameAway(
-                  event.target
-                    .value
-                )
+            value={newGameAway}
+            onChange={event =>
+              setNewGameAway(
+                event.target.value
+              )
             }
           />
 
           <input
             placeholder="Home Team"
-            value={
-              newGameHome
-            }
-            onChange={
-              event =>
-                setNewGameHome(
-                  event.target
-                    .value
-                )
+            value={newGameHome}
+            onChange={event =>
+              setNewGameHome(
+                event.target.value
+              )
             }
           />
 
@@ -2882,39 +2094,27 @@ export default function Admin() {
             placeholder="Home Spread"
             type="number"
             step="0.5"
-            value={
-              newGameSpread
-            }
-            onChange={
-              event =>
-                setNewGameSpread(
-                  event.target
-                    .value
-                )
+            value={newGameSpread}
+            onChange={event =>
+              setNewGameSpread(
+                event.target.value
+              )
             }
           />
 
           <input
             placeholder="Kickoff (ISO)"
-            value={
-              newGameKickoff
-            }
-            onChange={
-              event =>
-                setNewGameKickoff(
-                  event.target
-                    .value
-                )
+            value={newGameKickoff}
+            onChange={event =>
+              setNewGameKickoff(
+                event.target.value
+              )
             }
           />
 
           <button
-            onClick={
-              handleAddGame
-            }
-            disabled={
-              !weekReady
-            }
+            onClick={handleAddGame}
+            disabled={!weekReady}
           >
             Add Game
           </button>
@@ -2925,11 +2125,7 @@ export default function Admin() {
       {/* USER MANAGEMENT */}
       {/* ========================================================= */}
 
-      <section
-        style={{
-          marginTop: 40,
-        }}
-      >
+      <section style={{ marginTop: 40 }}>
         <h2>
           User Management
         </h2>
@@ -2939,78 +2135,47 @@ export default function Admin() {
             Loading profiles…
           </p>
         ) : (
-          <div
-            className="table-scroll"
-          >
-            <table
-              className="review-table"
-            >
+          <div className="table-scroll">
+            <table className="review-table">
               <thead>
                 <tr>
-                  <th>
-                    Username
-                  </th>
-
-                  <th>
-                    Name
-                  </th>
-
-                  <th>
-                    Email
-                  </th>
-
-                  <th>
-                    Actions
-                  </th>
+                  <th>Username</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
 
               <tbody>
-                {profiles.map(
-                  profile => (
-                    <tr
-                      key={
-                        profile.email
-                      }
-                    >
-                      <td>
-                        {
-                          profile.username
-                        }
-                      </td>
+                {profiles.map(profile => (
+                  <tr key={profile.email}>
+                    <td>
+                      {profile.username}
+                    </td>
 
-                      <td>
-                        {
-                          profile.first_name
-                        }{' '}
-                        {
-                          profile.last_name
-                        }
-                      </td>
+                    <td>
+                      {profile.first_name}{' '}
+                      {profile.last_name}
+                    </td>
 
-                      <td>
-                        {
-                          profile.email
-                        }
-                      </td>
+                    <td>
+                      {profile.email}
+                    </td>
 
-                      <td
-                        className="center"
+                    <td className="center">
+                      <button
+                        onClick={() =>
+                          handleDeleteUser(
+                            profile.email
+                          )
+                        }
+                        className="small-danger-button"
                       >
-                        <button
-                          onClick={() =>
-                            handleDeleteUser(
-                              profile.email
-                            )
-                          }
-                          className="small-danger-button"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                )}
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -3021,107 +2186,65 @@ export default function Admin() {
       {/* VIEW USER PICKS */}
       {/* ========================================================= */}
 
-      <section
-        style={{
-          marginTop: 40,
-        }}
-      >
+      <section style={{ marginTop: 40 }}>
         <h2>
           View User Picks
         </h2>
 
-        <div
-          style={{
-            marginBottom: 12,
-          }}
-        >
+        <div style={{ marginBottom: 12 }}>
           <select
-            value={
-              userForPicks
-            }
-            onChange={
-              event =>
-                setUserForPicks(
-                  event.target
-                    .value
-                )
+            value={userForPicks}
+            onChange={event =>
+              setUserForPicks(
+                event.target.value
+              )
             }
           >
-            <option
-              value=""
-            >
+            <option value="">
               Select user
             </option>
 
-            {profiles.map(
-              profile => (
-                <option
-                  key={
-                    profile.email
-                  }
-                  value={
-                    profile.email
-                  }
-                >
-                  {
-                    profile.username
-                  }
-                </option>
-              )
-            )}
+            {profiles.map(profile => (
+              <option
+                key={profile.email}
+                value={profile.email}
+              >
+                {profile.username}
+              </option>
+            ))}
           </select>
 
           <select
-            value={
-              weekForPicks
-            }
-            onChange={
-              event =>
-                setWeekForPicks(
-                  parseInt(
-                    event.target
-                      .value,
-                    10
-                  )
+            value={weekForPicks}
+            onChange={event =>
+              setWeekForPicks(
+                parseInt(
+                  event.target.value,
+                  10
                 )
+              )
             }
-            disabled={
-              !weekReady
-            }
+            disabled={!weekReady}
             style={{
               width: 60,
               marginLeft: 8,
             }}
           >
             {Array.from(
-              {
-                length: 18,
-              },
-              (
-                _,
-                index
-              ) =>
-                index + 1
-            ).map(
-              week => (
-                <option
-                  key={
-                    week
-                  }
-                  value={
-                    week
-                  }
-                >
-                  {week}
-                </option>
-              )
-            )}
+              { length: 18 },
+              (_, index) => index + 1
+            ).map(week => (
+              <option
+                key={week}
+                value={week}
+              >
+                {week}
+              </option>
+            ))}
           </select>
 
           <button
-            onClick={
-              loadUserPicks
-            }
+            onClick={loadUserPicks}
             disabled={
               loadingPicks ||
               !weekReady
@@ -3141,95 +2264,60 @@ export default function Admin() {
             Loading picks…
           </p>
         ) : (
-          <div
-            className="table-scroll"
-          >
-            <table
-              className="review-table"
-            >
+          <div className="table-scroll">
+            <table className="review-table">
               <thead>
                 <tr>
-                  <th>
-                    Game
-                  </th>
-
-                  <th>
-                    Pick
-                  </th>
-
-                  <th>
-                    Lock?
-                  </th>
-
-                  <th>
-                    Actions
-                  </th>
+                  <th>Game</th>
+                  <th>Pick</th>
+                  <th>Lock?</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
 
               <tbody>
-                {userPicks.map(
-                  pick => (
-                    <tr
-                      key={
-                        pick.id
-                      }
-                    >
-                      <td>
-                        {
-                          pick.games
-                            .away_team
-                        }{' '}
-                        @{' '}
-                        {
-                          pick.games
-                            .home_team
+                {userPicks.map(pick => (
+                  <tr key={pick.id}>
+                    <td>
+                      {pick.games.away_team}{' '}
+                      @{' '}
+                      {pick.games.home_team}
+
+                      <br />
+
+                      <small>
+                        {new Date(
+                          pick.games.kickoff_time
+                        ).toLocaleString()}
+                      </small>
+                    </td>
+
+                    <td>
+                      {pick.selected_team}
+                    </td>
+
+                    <td className="center">
+                      {pick.is_lock
+                        ? '✅'
+                        : ''}
+                    </td>
+
+                    <td className="center">
+                      <button
+                        onClick={() =>
+                          handleDeletePick(
+                            pick.id
+                          )
                         }
-
-                        <br />
-
-                        <small>
-                          {new Date(
-                            pick.games
-                              .kickoff_time
-                          ).toLocaleString()}
-                        </small>
-                      </td>
-
-                      <td>
-                        {
-                          pick.selected_team
-                        }
-                      </td>
-
-                      <td
-                        className="center"
+                        className="small-danger-button"
                       >
-                        {pick.is_lock
-                          ? '✅'
-                          : ''}
-                      </td>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
 
-                      <td
-                        className="center"
-                      >
-                        <button
-                          onClick={() =>
-                            handleDeletePick(
-                              pick.id
-                            )
-                          }
-                          className="small-danger-button"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                )}
-
-                {userPicks.length ===
-                  0 && (
+                {userPicks.length === 0 && (
                   <tr>
                     <td
                       colSpan={4}
@@ -3249,30 +2337,22 @@ export default function Admin() {
       {/* CALCULATE SCORES */}
       {/* ========================================================= */}
 
-      <section
-        style={{
-          marginTop: 40,
-        }}
-      >
+      <section style={{ marginTop: 40 }}>
         <h2>
           Calculate Scores
           {' '}
-          (Week{' '}
-          {selectedWeek})
+          (Week {selectedWeek})
         </h2>
 
-        <p
-          className="panel-note"
-        >
-          Approve the final results above first, then use this button
-          to review each user's weekly scoring.
+        <p className="panel-note">
+          {preseasonTestMode
+            ? 'For testing, calculate after the specific games you want to test have approved results. The scoring logic itself is unchanged.'
+            : "Approve the final results above first, then use this button to review each user's weekly scoring."}
         </p>
 
         <button
           className="admin-button calculate-button"
-          onClick={
-            calculateScores
-          }
+          onClick={calculateScores}
           disabled={
             loadingScores ||
             !weekReady
@@ -3283,107 +2363,53 @@ export default function Admin() {
             : 'Calculate Scores'}
         </button>
 
-        {weeklyScores.length >
-          0 && (
-          <div
-            className="table-scroll"
-          >
-            <table
-              className="review-table score-table"
-            >
+        {weeklyScores.length > 0 && (
+          <div className="table-scroll">
+            <table className="review-table score-table">
               <thead>
                 <tr>
-                  <th>
-                    Email
-                  </th>
-
-                  <th>
-                    Points
-                  </th>
-
-                  <th>
-                    Correct
-                  </th>
-
-                  <th>
-                    Lock ✔
-                  </th>
-
-                  <th>
-                    Lock ✘
-                  </th>
-
-                  <th>
-                    Bonus
-                  </th>
+                  <th>Email</th>
+                  <th>Points</th>
+                  <th>Correct</th>
+                  <th>Lock ✔</th>
+                  <th>Lock ✘</th>
+                  <th>Bonus</th>
                 </tr>
               </thead>
 
               <tbody>
-                {weeklyScores.map(
-                  user => (
-                    <tr
-                      key={
-                        user.email
-                      }
-                    >
-                      <td>
-                        {
-                          user.email
-                        }
-                      </td>
+                {weeklyScores.map(user => (
+                  <tr key={user.email}>
+                    <td>
+                      {user.email}
+                    </td>
 
-                      <td
-                        className="center"
-                      >
-                        {
-                          user.weeklyPoints
-                        }
-                      </td>
+                    <td className="center">
+                      {user.weeklyPoints}
+                    </td>
 
-                      <td
-                        className="center"
-                      >
-                        {
-                          user.correct
-                        }
-                      </td>
+                    <td className="center">
+                      {user.correct}
+                    </td>
 
-                      <td
-                        className="center"
-                      >
-                        {
-                          user.lockCorrect
-                        }
-                      </td>
+                    <td className="center">
+                      {user.lockCorrect}
+                    </td>
 
-                      <td
-                        className="center"
-                      >
-                        {
-                          user.lockIncorrect
-                        }
-                      </td>
+                    <td className="center">
+                      {user.lockIncorrect}
+                    </td>
 
-                      <td
-                        className="center"
-                      >
-                        {
-                          user.perfectBonus
-                        }
-                      </td>
-                    </tr>
-                  )
-                )}
+                    <td className="center">
+                      {user.perfectBonus}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
       </section>
-
-      {/* ========================================================= */}
-      {/* STYLES */}
-      {/* ========================================================= */}
 
       <style jsx>{`
         .admin-panel {
@@ -3415,6 +2441,44 @@ export default function Admin() {
 
         .muted {
           color: #64748b;
+        }
+
+        .test-mode-box {
+          max-width: 900px;
+          margin: 18px 0;
+          padding: 14px 16px;
+          border: 1px solid ${
+            preseasonTestMode
+              ? '#eab308'
+              : '#475569'
+          };
+          border-radius: 8px;
+          background: ${
+            preseasonTestMode
+              ? 'rgba(234, 179, 8, 0.10)'
+              : 'rgba(71, 85, 105, 0.12)'
+          };
+        }
+
+        .test-mode-label {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+        }
+
+        .test-mode-copy {
+          margin: 8px 0 0;
+          color: #cbd5e1;
+          line-height: 1.45;
+          font-size: 14px;
+        }
+
+        .test-warning {
+          background: #fef9c3;
+          border-color: #fde047;
+          color: #854d0e;
+          margin-bottom: 14px;
         }
 
         .source-summary {
