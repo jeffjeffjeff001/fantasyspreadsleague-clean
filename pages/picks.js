@@ -11,15 +11,15 @@ export default function PickSubmission() {
   const username = profile?.username || session?.user?.email
 
   const [selectedWeek, setSelectedWeek] = useState(1)
-  const [weekReady, setWeekReady]       = useState(false)
+  const [weekReady, setWeekReady] = useState(false)
   const [allWeekGames, setAllWeekGames] = useState([])
-  const [games, setGames]               = useState([])
+  const [games, setGames] = useState([])
   const [existingPicks, setExistingPicks] = useState([])
-  const [picks, setPicks]               = useState({})
-  const [lockPick, setLockPick]         = useState(null)
-  const [status, setStatus]             = useState(null)
+  const [picks, setPicks] = useState({})
+  const [lockPick, setLockPick] = useState(null)
+  const [status, setStatus] = useState(null)
   const [loadingGames, setLoadingGames] = useState(false)
-  const [submitting, setSubmitting]     = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   // Determine the current NFL week.
   // The week advances only after Tuesday at 10:00 PM Eastern.
@@ -78,7 +78,9 @@ export default function PickSubmission() {
           .from('games')
           .select('*')
           .eq('week', selectedWeek)
-          .order('kickoff_time', { ascending: true })
+          .order('kickoff_time', {
+            ascending: true,
+          })
 
       if (cancelled) return
 
@@ -97,18 +99,27 @@ export default function PickSubmission() {
       let storedPicks = []
 
       if (gameIds.length > 0) {
-        const { data, error: picksError } = await supabase
-          .from('picks')
-          .select(
-            'id,user_email,game_id,selected_team,is_lock,submitted_at'
-          )
-          .eq('user_email', session.user.email)
-          .in('game_id', gameIds)
+        const { data, error: picksError } =
+          await supabase
+            .from('picks')
+            .select(
+              'id,user_email,game_id,selected_team,is_lock,submitted_at'
+            )
+            .eq(
+              'user_email',
+              session.user.email
+            )
+            .in(
+              'game_id',
+              gameIds
+            )
 
         if (cancelled) return
 
         if (picksError) {
-          setStatus(`🚫 ${picksError.message}`)
+          setStatus(
+            `🚫 ${picksError.message}`
+          )
           setAllWeekGames(loadedGames)
           setGames([])
           setExistingPicks([])
@@ -124,17 +135,26 @@ export default function PickSubmission() {
       const cutoffMs = Date.now() - GRACE_MS
 
       const submittedGameIds = new Set(
-        storedPicks.map(pick => String(pick.game_id))
+        storedPicks.map(
+          pick => String(pick.game_id)
+        )
       )
 
-      const availableGames = loadedGames.filter(game => {
-        const kickoffMs = new Date(game.kickoff_time).getTime()
+      const availableGames = loadedGames.filter(
+        game => {
+          const kickoffMs =
+            new Date(
+              game.kickoff_time
+            ).getTime()
 
-        return (
-          kickoffMs >= cutoffMs &&
-          !submittedGameIds.has(String(game.id))
-        )
-      })
+          return (
+            kickoffMs >= cutoffMs &&
+            !submittedGameIds.has(
+              String(game.id)
+            )
+          )
+        }
+      )
 
       setAllWeekGames(loadedGames)
       setExistingPicks(storedPicks)
@@ -147,14 +167,24 @@ export default function PickSubmission() {
     return () => {
       cancelled = true
     }
-  }, [selectedWeek, session, weekReady])
+  }, [
+    selectedWeek,
+    session,
+    weekReady,
+  ])
 
   if (!session) {
     return (
-      <div style={{ padding: 20 }}>
+      <div
+        style={{
+          padding: 20,
+        }}
+      >
         <p>
           <Link href="/join-league">
-            <a>Please join the league to submit picks →</a>
+            <a>
+              Please join the league to submit picks →
+            </a>
           </Link>
         </p>
       </div>
@@ -163,47 +193,63 @@ export default function PickSubmission() {
 
   const findGameById = id =>
     allWeekGames.find(
-      game => String(game.id) === String(id)
+      game =>
+        String(game.id) ===
+        String(id)
     )
 
-  const countCategoriesByGameIds = gameIds => {
-    if (selectedWeek === 18) {
+  const countCategoriesByGameIds =
+    gameIds => {
+      if (selectedWeek === 18) {
+        return {
+          th: 0,
+          mo: 0,
+          be: gameIds.length,
+        }
+      }
+
+      let th = 0
+      let mo = 0
+      let be = 0
+
+      gameIds.forEach(id => {
+        const game =
+          findGameById(id)
+
+        if (!game) return
+
+        const day =
+          new Date(
+            game.kickoff_time
+          ).getDay()
+
+        if (day === 4) {
+          th += 1
+        } else if (day === 1) {
+          mo += 1
+        } else {
+          be += 1
+        }
+      })
+
       return {
-        th: 0,
-        mo: 0,
-        be: gameIds.length,
+        th,
+        mo,
+        be,
       }
     }
-
-    let th = 0
-    let mo = 0
-    let be = 0
-
-    gameIds.forEach(id => {
-      const game = findGameById(id)
-
-      if (!game) return
-
-      const day = new Date(game.kickoff_time).getDay()
-
-      if (day === 4) {
-        th += 1
-      } else if (day === 1) {
-        mo += 1
-      } else {
-        be += 1
-      }
-    })
-
-    return { th, mo, be }
-  }
 
   const getCombinedGameIds = (
     pendingPicks = picks,
     storedPicks = existingPicks
   ) => [
-    ...storedPicks.map(pick => String(pick.game_id)),
-    ...Object.keys(pendingPicks).map(String),
+    ...storedPicks.map(
+      pick =>
+        String(pick.game_id)
+    ),
+    ...Object.keys(
+      pendingPicks
+    ).map(String),
   ]
 
   const countCombinedCategories = (
@@ -211,37 +257,61 @@ export default function PickSubmission() {
     storedPicks = existingPicks
   ) =>
     countCategoriesByGameIds(
-      getCombinedGameIds(pendingPicks, storedPicks)
+      getCombinedGameIds(
+        pendingPicks,
+        storedPicks
+      )
     )
 
   const getExistingLockCount = (
     storedPicks = existingPicks
   ) =>
-    storedPicks.filter(pick => Boolean(pick.is_lock)).length
+    storedPicks.filter(
+      pick =>
+        Boolean(pick.is_lock)
+    ).length
 
   const validateCombinedPicks = (
     pendingPicks,
     storedPicks,
     pendingLockPick = lockPick
   ) => {
-    const pendingCount = Object.keys(pendingPicks).length
-    const storedCount = storedPicks.length
-    const combinedCount = storedCount + pendingCount
+    const pendingCount =
+      Object.keys(
+        pendingPicks
+      ).length
+
+    const storedCount =
+      storedPicks.length
+
+    const combinedCount =
+      storedCount +
+      pendingCount
 
     if (combinedCount > 5) {
       return '🚫 You can only have 5 picks stored for a week.'
     }
 
     if (combinedCount < 5) {
-      const remaining = 5 - combinedCount
+      const remaining =
+        5 - combinedCount
 
       return `🚫 You need ${remaining} more pick${
-        remaining === 1 ? '' : 's'
+        remaining === 1
+          ? ''
+          : 's'
       } to complete Week ${selectedWeek}.`
     }
 
-    const { th, mo, be } =
-      countCombinedCategories(pendingPicks, storedPicks)
+    const {
+      th,
+      mo,
+      be,
+    } =
+      countCombinedCategories(
+        pendingPicks,
+        storedPicks
+      )
 
     if (selectedWeek === 18) {
       if (be !== 5) {
@@ -259,7 +329,9 @@ export default function PickSubmission() {
     }
 
     const existingLockCount =
-      getExistingLockCount(storedPicks)
+      getExistingLockCount(
+        storedPicks
+      )
 
     const pendingLockCount =
       pendingLockPick != null &&
@@ -271,7 +343,8 @@ export default function PickSubmission() {
         : 0
 
     const totalLocks =
-      existingLockCount + pendingLockCount
+      existingLockCount +
+      pendingLockCount
 
     if (totalLocks !== 1) {
       return '🚫 Your five picks must contain exactly one lock pick.'
@@ -280,16 +353,24 @@ export default function PickSubmission() {
     return null
   }
 
-  const handlePick = (gid, team) => {
+  const handlePick = (
+    gid,
+    team
+  ) => {
     setStatus(null)
 
-    const copy = { ...picks }
+    const copy = {
+      ...picks,
+    }
 
     // Unselect the same pick.
     if (copy[gid] === team) {
       delete copy[gid]
 
-      if (String(lockPick) === String(gid)) {
+      if (
+        String(lockPick) ===
+        String(gid)
+      ) {
         setLockPick(null)
       }
 
@@ -298,14 +379,22 @@ export default function PickSubmission() {
     }
 
     const alreadySelectedThisGame =
-      Object.prototype.hasOwnProperty.call(copy, gid)
+      Object.prototype.hasOwnProperty.call(
+        copy,
+        gid
+      )
 
     const remainingSlots =
-      Math.max(0, 5 - existingPicks.length)
+      Math.max(
+        0,
+        5 -
+          existingPicks.length
+      )
 
     if (
       !alreadySelectedThisGame &&
-      Object.keys(copy).length >= remainingSlots
+      Object.keys(copy).length >=
+        remainingSlots
     ) {
       setStatus(
         '🚫 You already have the maximum of 5 picks stored for this week.'
@@ -315,24 +404,40 @@ export default function PickSubmission() {
 
     copy[gid] = team
 
-    const { th, mo, be } =
-      countCombinedCategories(copy, existingPicks)
+    const {
+      th,
+      mo,
+      be,
+    } =
+      countCombinedCategories(
+        copy,
+        existingPicks
+      )
 
-    if (selectedWeek !== 18) {
+    if (
+      selectedWeek !== 18
+    ) {
       if (th > 1) {
         delete copy[gid]
-        setStatus('🚫 Only 1 Thursday pick is allowed.')
+
+        setStatus(
+          '🚫 Only 1 Thursday pick is allowed.'
+        )
         return
       }
 
       if (mo > 1) {
         delete copy[gid]
-        setStatus('🚫 Only 1 Monday pick is allowed.')
+
+        setStatus(
+          '🚫 Only 1 Monday pick is allowed.'
+        )
         return
       }
 
       if (be > 3) {
         delete copy[gid]
+
         setStatus(
           '🚫 Only 3 “Best Choice” picks are allowed.'
         )
@@ -340,7 +445,10 @@ export default function PickSubmission() {
       }
     } else if (be > 5) {
       delete copy[gid]
-      setStatus('🚫 Only 5 picks are allowed in Week 18.')
+
+      setStatus(
+        '🚫 Only 5 picks are allowed in Week 18.'
+      )
       return
     }
 
@@ -355,7 +463,10 @@ export default function PickSubmission() {
       return
     }
 
-    if (getExistingLockCount() > 0) {
+    if (
+      getExistingLockCount() >
+      0
+    ) {
       setStatus(
         '🚫 You already have a lock pick submitted for this week. Delete that lock pick from My Profile before choosing a new one.'
       )
@@ -363,15 +474,25 @@ export default function PickSubmission() {
     }
 
     setStatus(null)
+
     setLockPick(
-      String(lockPick) === String(gid) ? null : gid
+      String(lockPick) ===
+        String(gid)
+        ? null
+        : gid
     )
   }
 
   async function fetchFreshExistingPicks() {
-    const gameIds = allWeekGames.map(game => game.id)
+    const gameIds =
+      allWeekGames.map(
+        game =>
+          game.id
+      )
 
-    if (gameIds.length === 0) {
+    if (
+      gameIds.length === 0
+    ) {
       return {
         data: [],
         error: null,
@@ -383,186 +504,298 @@ export default function PickSubmission() {
       .select(
         'id,user_email,game_id,selected_team,is_lock,submitted_at'
       )
-      .eq('user_email', session.user.email)
-      .in('game_id', gameIds)
+      .eq(
+        'user_email',
+        session.user.email
+      )
+      .in(
+        'game_id',
+        gameIds
+      )
   }
 
-  const savePicks = async () => {
-    setSubmitting(true)
+  const savePicks =
+    async () => {
+      setSubmitting(true)
 
-    try {
-      const entries = Object.entries(picks)
+      try {
+        const entries =
+          Object.entries(
+            picks
+          )
 
-      // Re-check the database immediately before inserting.
-      // This protects against stale tabs and accidental resubmission.
-      const {
-        data: freshExistingPicks,
-        error: existingError,
-      } = await fetchFreshExistingPicks()
+        // Re-check the database immediately before inserting.
+        // This protects against stale tabs and accidental resubmission.
+        const {
+          data:
+            freshExistingPicks,
 
-      if (existingError) {
-        setStatus(`🚫 ${existingError.message}`)
-        return
-      }
+          error:
+            existingError,
+        } =
+          await fetchFreshExistingPicks()
 
-      const freshStoredPicks = freshExistingPicks || []
+        if (
+          existingError
+        ) {
+          setStatus(
+            `🚫 ${existingError.message}`
+          )
+          return
+        }
 
-      const freshGameIds = new Set(
-        freshStoredPicks.map(
-          pick => String(pick.game_id)
+        const freshStoredPicks =
+          freshExistingPicks ||
+          []
+
+        const freshGameIds =
+          new Set(
+            freshStoredPicks.map(
+              pick =>
+                String(
+                  pick.game_id
+                )
+            )
+          )
+
+        const hasDuplicate =
+          entries.some(
+            ([gid]) =>
+              freshGameIds.has(
+                String(gid)
+              )
+          )
+
+        if (
+          hasDuplicate
+        ) {
+          setStatus(
+            '🚫 Duplicate pick submitted, please try again.'
+          )
+          return
+        }
+
+        if (
+          freshStoredPicks.length +
+            entries.length >
+          5
+        ) {
+          setStatus(
+            '🚫 You already have 5 picks stored for this week. Delete an existing pick from My Profile before submitting another.'
+          )
+          return
+        }
+
+        const startedGame =
+          entries.find(
+            ([gid]) => {
+              const game =
+                findGameById(
+                  gid
+                )
+
+              return (
+                !game ||
+                new Date(
+                  game.kickoff_time
+                ).getTime() <=
+                  Date.now()
+              )
+            }
+          )
+
+        if (
+          startedGame
+        ) {
+          setStatus(
+            '🚫 One of the selected games has already started. Refresh the page and try again.'
+          )
+          return
+        }
+
+        const validationError =
+          validateCombinedPicks(
+            picks,
+            freshStoredPicks,
+            lockPick
+          )
+
+        if (
+          validationError
+        ) {
+          setStatus(
+            validationError
+          )
+
+          setExistingPicks(
+            freshStoredPicks
+          )
+
+          return
+        }
+
+        const inserts =
+          entries.map(
+            (
+              [
+                gid,
+                team,
+              ]
+            ) => ({
+              user_email:
+                session.user.email,
+
+              game_id:
+                gid,
+
+              selected_team:
+                team,
+
+              is_lock:
+                String(gid) ===
+                String(lockPick),
+            })
+          )
+
+        const {
+          data:
+            insertedPicks,
+
+          error,
+        } =
+          await supabase
+            .from('picks')
+            .insert(
+              inserts
+            )
+            .select(
+              'id,user_email,game_id,selected_team,is_lock,submitted_at'
+            )
+
+        if (error) {
+          const errorMessage =
+            String(
+              error.message ||
+                ''
+            ).toUpperCase()
+
+          if (
+            errorMessage.includes(
+              'LOCK_ALREADY_EXISTS'
+            )
+          ) {
+            setStatus(
+              '🚫 You already have a lock pick submitted for this week. Only one lock pick is allowed.'
+            )
+          } else if (
+            error.code ===
+              '23505' ||
+            errorMessage.includes(
+              'DUPLICATE_PICK'
+            ) ||
+            errorMessage.includes(
+              'DUPLICATE KEY'
+            )
+          ) {
+            setStatus(
+              '🚫 Duplicate pick submitted, please try again.'
+            )
+          } else if (
+            errorMessage.includes(
+              'MAX_WEEKLY_PICKS'
+            )
+          ) {
+            setStatus(
+              '🚫 You already have 5 picks stored for this week. Delete an existing pick from My Profile before submitting another.'
+            )
+          } else {
+            setStatus(
+              `🚫 ${error.message}`
+            )
+          }
+
+          return
+        }
+
+        const submittedIds =
+          entries.map(
+            ([gid]) =>
+              String(gid)
+          )
+
+        setGames(
+          previousGames =>
+            previousGames.filter(
+              game =>
+                !submittedIds.includes(
+                  String(
+                    game.id
+                  )
+                )
+            )
         )
-      )
 
-      const hasDuplicate = entries.some(([gid]) =>
-        freshGameIds.has(String(gid))
-      )
+        setExistingPicks([
+          ...freshStoredPicks,
+          ...(insertedPicks ||
+            []),
+        ])
 
-      if (hasDuplicate) {
+        setPicks({})
+        setLockPick(null)
+
         setStatus(
-          '🚫 Duplicate pick submitted, please try again.'
+          '✅ Success! Your picks were submitted.'
         )
-        return
+      } finally {
+        setSubmitting(
+          false
+        )
       }
-
-      if (
-        freshStoredPicks.length + entries.length > 5
-      ) {
-        setStatus(
-          '🚫 You already have 5 picks stored for this week. Delete an existing pick from My Profile before submitting another.'
-        )
-        return
-      }
-
-      const startedGame = entries.find(([gid]) => {
-        const game = findGameById(gid)
-
-        return (
-          !game ||
-          new Date(game.kickoff_time).getTime() <=
-            Date.now()
-        )
-      })
-
-      if (startedGame) {
-        setStatus(
-          '🚫 One of the selected games has already started. Refresh the page and try again.'
-        )
-        return
-      }
-
-      const validationError = validateCombinedPicks(
-        picks,
-        freshStoredPicks,
-        lockPick
-      )
-
-      if (validationError) {
-        setStatus(validationError)
-        setExistingPicks(freshStoredPicks)
-        return
-      }
-
-      const inserts = entries.map(([gid, team]) => ({
-        user_email: session.user.email,
-        game_id: gid,
-        selected_team: team,
-        is_lock: String(gid) === String(lockPick),
-      }))
-
-      const {
-        data: insertedPicks,
-        error,
-      } = await supabase
-        .from('picks')
-        .insert(inserts)
-        .select(
-          'id,user_email,game_id,selected_team,is_lock,submitted_at'
-        )
-
-     if (error) {
-  const errorMessage =
-    String(error.message || '').toUpperCase()
-
-  if (
-    errorMessage.includes('LOCK_ALREADY_EXISTS')
-  ) {
-    setStatus(
-      '🚫 You already have a lock pick submitted for this week. Only one lock pick is allowed.'
-    )
-  } else if (
-    error.code === '23505' ||
-    errorMessage.includes('DUPLICATE_PICK') ||
-    errorMessage.includes('DUPLICATE KEY')
-  ) {
-    setStatus(
-      '🚫 Duplicate pick submitted, please try again.'
-    )
-  } else if (
-    errorMessage.includes('MAX_WEEKLY_PICKS')
-  ) {
-    setStatus(
-      '🚫 You already have 5 picks stored for this week. Delete an existing pick from My Profile before submitting another.'
-    )
-  } else {
-    setStatus(`🚫 ${error.message}`)
-  }
-
-  return
-}
-      
-      const submittedIds = entries.map(([gid]) =>
-        String(gid)
-      )
-
-      setGames(previousGames =>
-        previousGames.filter(
-          game =>
-            !submittedIds.includes(String(game.id))
-        )
-      )
-
-      setExistingPicks([
-        ...freshStoredPicks,
-        ...(insertedPicks || []),
-      ])
-
-      setPicks({})
-      setLockPick(null)
-      setStatus(
-        '✅ Success! Your picks were submitted.'
-      )
-    } finally {
-      setSubmitting(false)
     }
-  }
 
   const submitPicks = () => {
     if (submitting) return
 
     setStatus(null)
 
-    const pendingCount = Object.keys(picks).length
+    const pendingCount =
+      Object.keys(
+        picks
+      ).length
 
-    if (pendingCount === 0) {
-      if (existingPicks.length >= 5) {
+    if (
+      pendingCount === 0
+    ) {
+      if (
+        existingPicks.length >=
+        5
+      ) {
         setStatus(
           '🚫 You already have 5 picks stored for this week.'
         )
       } else {
-        setStatus('🚫 Please select at least one game.')
+        setStatus(
+          '🚫 Please select at least one game.'
+        )
       }
 
       return
     }
 
-    const validationError = validateCombinedPicks(
-      picks,
-      existingPicks,
-      lockPick
-    )
+    const validationError =
+      validateCombinedPicks(
+        picks,
+        existingPicks,
+        lockPick
+      )
 
-    if (validationError) {
-      setStatus(validationError)
+    if (
+      validationError
+    ) {
+      setStatus(
+        validationError
+      )
       return
     }
 
@@ -570,25 +803,49 @@ export default function PickSubmission() {
   }
 
   const isSuccess =
-    typeof status === 'string' &&
+    typeof status ===
+      'string' &&
     status.startsWith('✅')
 
   const isWarning =
-    typeof status === 'string' &&
+    typeof status ===
+      'string' &&
     status.startsWith('⚠️')
 
-  const submittedCount = existingPicks.length
-  const remainingSlots = Math.max(0, 5 - submittedCount)
-  const hasExistingLock = getExistingLockCount() > 0
+  const submittedCount =
+    existingPicks.length
+
+  const remainingSlots =
+    Math.max(
+      0,
+      5 - submittedCount
+    )
+
+  const hasExistingLock =
+    getExistingLockCount() >
+    0
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Submit Your Picks</h2>
+    <div
+      style={{
+        padding: 20,
+      }}
+    >
+      <h2>
+        Submit Your Picks
+      </h2>
 
       <p>
-        Logged in as <strong>{username}</strong> |{' '}
+        Logged in as{' '}
+        <strong>
+          {username}
+        </strong>{' '}
+        |{' '}
+
         <Link href="/">
-          <a>Home</a>
+          <a>
+            Home
+          </a>
         </Link>
       </p>
 
@@ -608,27 +865,58 @@ export default function PickSubmission() {
         </div>
       )}
 
-      <div style={{ marginBottom: 16 }}>
+      <div
+        style={{
+          marginBottom: 16,
+        }}
+      >
         <label>
           Week:&nbsp;
+
           <select
-            value={selectedWeek}
-            onChange={event =>
-              setSelectedWeek(
-                parseInt(event.target.value, 10)
-              )
+            value={
+              selectedWeek
             }
-            disabled={!weekReady}
-            style={{ width: 60 }}
+            onChange={
+              event =>
+                setSelectedWeek(
+                  parseInt(
+                    event.target
+                      .value,
+                    10
+                  )
+                )
+            }
+            disabled={
+              !weekReady
+            }
+            style={{
+              width: 60,
+            }}
           >
             {Array.from(
-              { length: 18 },
-              (_, index) => index + 1
-            ).map(week => (
-              <option key={week} value={week}>
-                {week}
-              </option>
-            ))}
+              {
+                length: 18,
+              },
+              (
+                _,
+                index
+              ) =>
+                index + 1
+            ).map(
+              week => (
+                <option
+                  key={
+                    week
+                  }
+                  value={
+                    week
+                  }
+                >
+                  {week}
+                </option>
+              )
+            )}
           </select>
         </label>
 
@@ -636,7 +924,8 @@ export default function PickSubmission() {
           <small
             style={{
               marginLeft: 10,
-              color: '#64748b',
+              color:
+                '#64748b',
             }}
           >
             Automatically opens to the current week.
@@ -644,151 +933,258 @@ export default function PickSubmission() {
         )}
       </div>
 
-      {weekReady && !loadingGames && (
-        <div
-          className={
-            submittedCount > 5
-              ? 'pick-count-box pick-count-error'
-              : 'pick-count-box'
-          }
-        >
-          <strong>
-            Submitted picks: {submittedCount}/5
-          </strong>
+      {weekReady &&
+        !loadingGames && (
+          <div
+            className={
+              submittedCount >
+              5
+                ? 'pick-count-box pick-count-error'
+                : 'pick-count-box'
+            }
+          >
+            <strong>
+              Submitted picks:{' '}
+              {
+                submittedCount
+              }
+              /5
+            </strong>
 
-          {submittedCount < 5 ? (
-            <span>
-              {' '}
-              — {remainingSlots} pick
-              {remainingSlots === 1 ? '' : 's'} remaining.
-            </span>
-          ) : submittedCount === 5 ? (
-            <span>
-              {' '}
-              — Your Week {selectedWeek} card is full.
-            </span>
-          ) : (
-            <span>
-              {' '}
-              — More than 5 picks are currently stored. Please
-              delete the extra picks from My Profile.
-            </span>
-          )}
+            {submittedCount <
+            5 ? (
+              <span>
+                {' '}
+                —{' '}
+                {
+                  remainingSlots
+                }{' '}
+                pick
+                {remainingSlots ===
+                1
+                  ? ''
+                  : 's'}{' '}
+                remaining.
+              </span>
+            ) : submittedCount ===
+              5 ? (
+              <span>
+                {' '}
+                — Your Week{' '}
+                {
+                  selectedWeek
+                }{' '}
+                card is full.
+              </span>
+            ) : (
+              <span>
+                {' '}
+                — More than 5
+                picks are currently
+                stored. Please delete
+                the extra picks from
+                My Profile.
+              </span>
+            )}
 
-          {hasExistingLock && (
-            <div className="lock-note">
-              Your lock pick has already been submitted.
-            </div>
-          )}
-        </div>
-      )}
+            {hasExistingLock && (
+              <div
+                className="lock-note"
+              >
+                Your lock pick has
+                already been
+                submitted.
+              </div>
+            )}
+          </div>
+        )}
 
-      {!weekReady || loadingGames ? (
-        <p>Loading Week {selectedWeek} games…</p>
-      ) : submittedCount >= 5 ? (
+      {!weekReady ||
+      loadingGames ? (
         <p>
-          You already have 5 picks submitted for Week{' '}
-          {selectedWeek}. To make a change before kickoff, delete
-          an eligible pick from My Profile first.
+          Loading Week{' '}
+          {selectedWeek}{' '}
+          games…
         </p>
-      ) : games.length === 0 ? (
+      ) : submittedCount >=
+        5 ? (
         <p>
-          No upcoming games are available for Week{' '}
+          You already have 5 picks
+          submitted for Week{' '}
+          {selectedWeek}. To make a
+          change before kickoff,
+          delete an eligible pick
+          from My Profile first.
+        </p>
+      ) : allWeekGames.length ===
+        0 ? (
+        <div
+          className="spread-posting-message"
+        >
+          Week {selectedWeek} spreads
+          will be posted up to 2 days
+          prior to kickoff of the
+          first game.
+        </div>
+      ) : games.length ===
+        0 ? (
+        <p>
+          No upcoming games are
+          available for Week{' '}
           {selectedWeek}.
         </p>
       ) : (
-        games.map(game => (
-          <div
-            key={game.id}
-            style={{ marginBottom: 12 }}
-          >
-            <strong>
-              {game.away_team} @ {game.home_team}{' '}
-              (
-              {game.spread > 0
-                ? `+${game.spread}`
-                : game.spread}
-              ) —{' '}
-              {new Date(
-                game.kickoff_time
-              ).toLocaleString(undefined, {
-                weekday: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </strong>
+        games.map(
+          game => (
+            <div
+              key={
+                game.id
+              }
+              style={{
+                marginBottom:
+                  12,
+              }}
+            >
+              <strong>
+                {
+                  game.away_team
+                }{' '}
+                @{' '}
+                {
+                  game.home_team
+                }{' '}
+                (
+                {game.spread >
+                0
+                  ? `+${game.spread}`
+                  : game.spread}
+                ) —{' '}
+                {new Date(
+                  game.kickoff_time
+                ).toLocaleString(
+                  undefined,
+                  {
+                    weekday:
+                      'short',
+                    hour:
+                      '2-digit',
+                    minute:
+                      '2-digit',
+                  }
+                )}
+              </strong>
 
-            <br />
+              <br />
 
-            <label>
-              <input
-                type="radio"
-                name={`pick-${game.id}`}
-                checked={
-                  picks[game.id] === game.home_team
-                }
-                onChange={() =>
-                  handlePick(
-                    game.id,
+              <label>
+                <input
+                  type="radio"
+                  name={`pick-${game.id}`}
+                  checked={
+                    picks[
+                      game.id
+                    ] ===
                     game.home_team
-                  )
+                  }
+                  onChange={() =>
+                    handlePick(
+                      game.id,
+                      game.home_team
+                    )
+                  }
+                  disabled={
+                    remainingSlots ===
+                    0
+                  }
+                />{' '}
+                {
+                  game.home_team
                 }
-                disabled={remainingSlots === 0}
-              />{' '}
-              {game.home_team}
-            </label>
+              </label>
 
-            <label style={{ marginLeft: 12 }}>
-              <input
-                type="radio"
-                name={`pick-${game.id}`}
-                checked={
-                  picks[game.id] === game.away_team
-                }
-                onChange={() =>
-                  handlePick(
-                    game.id,
+              <label
+                style={{
+                  marginLeft:
+                    12,
+                }}
+              >
+                <input
+                  type="radio"
+                  name={`pick-${game.id}`}
+                  checked={
+                    picks[
+                      game.id
+                    ] ===
                     game.away_team
-                  )
+                  }
+                  onChange={() =>
+                    handlePick(
+                      game.id,
+                      game.away_team
+                    )
+                  }
+                  disabled={
+                    remainingSlots ===
+                    0
+                  }
+                />{' '}
+                {
+                  game.away_team
                 }
-                disabled={remainingSlots === 0}
-              />{' '}
-              {game.away_team}
-            </label>
+              </label>
 
-            <label style={{ marginLeft: 12 }}>
-              <input
-                type="checkbox"
-                checked={
-                  String(lockPick) ===
-                  String(game.id)
-                }
-                onChange={() =>
-                  handleLock(game.id)
-                }
-                disabled={
-                  remainingSlots === 0 ||
-                  hasExistingLock
-                }
-              />{' '}
-              Lock
-            </label>
-          </div>
-        ))
+              <label
+                style={{
+                  marginLeft:
+                    12,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    String(
+                      lockPick
+                    ) ===
+                    String(
+                      game.id
+                    )
+                  }
+                  onChange={() =>
+                    handleLock(
+                      game.id
+                    )
+                  }
+                  disabled={
+                    remainingSlots ===
+                      0 ||
+                    hasExistingLock
+                  }
+                />{' '}
+                Lock
+              </label>
+            </div>
+          )
+        )
       )}
 
       <button
         className="action-button submit-picks-button"
-        onClick={submitPicks}
+        onClick={
+          submitPicks
+        }
         disabled={
           !weekReady ||
           loadingGames ||
           submitting ||
-          games.length === 0 ||
-          remainingSlots === 0
+          games.length ===
+            0 ||
+          remainingSlots ===
+            0
         }
       >
-        {submitting ? 'Submitting…' : 'Submit Picks'}
+        {submitting
+          ? 'Submitting…'
+          : 'Submit Picks'}
       </button>
 
       <style jsx>{`
@@ -820,6 +1216,18 @@ export default function PickSubmission() {
           border-color: #fca5a5;
         }
 
+        .spread-posting-message {
+          max-width: 620px;
+          margin: 0 0 18px;
+          padding: 14px 16px;
+          border: 1px solid #fde68a;
+          border-radius: 8px;
+          background: #fffbeb;
+          color: #92400e;
+          font-weight: 700;
+          line-height: 1.45;
+        }
+
         .pick-count-box {
           max-width: 620px;
           margin: 0 0 18px;
@@ -842,39 +1250,52 @@ export default function PickSubmission() {
           font-size: 14px;
         }
 
-       .action-button {
-  appearance: none;
-  min-width: 150px;
-  padding: 11px 20px;
-  border: 1px solid #b91c1c;
-  border-radius: 8px;
-  background: #dc2626;
-  color: #ffffff;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.2;
-  cursor: pointer;
-  box-shadow: 0 4px 0 #991b1b;
-  transition:
-    transform 80ms ease,
-    box-shadow 80ms ease,
-    background-color 150ms ease;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
+        .action-button {
+          appearance: none;
+          min-width: 150px;
+          padding: 11px 20px;
+          border: 1px solid #b91c1c;
+          border-radius: 8px;
+          background: #dc2626;
+          color: #ffffff;
+          font-size: 16px;
+          font-weight: 700;
+          line-height: 1.2;
+          cursor: pointer;
+          box-shadow: 0 4px 0 #991b1b;
+          transition:
+            transform 80ms ease,
+            box-shadow 80ms ease,
+            background-color 150ms ease;
+          user-select: none;
+          -webkit-tap-highlight-color:
+            transparent;
+        }
 
-.action-button:hover:not(:disabled) {
-  background: #b91c1c;
-}
+        .action-button:hover:not(:disabled) {
+          background: #b91c1c;
+        }
 
-.action-button:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: 0 0 0 #991b1b;
-}
+        .action-button:active:not(:disabled) {
+          transform:
+            translateY(4px);
+
+          box-shadow:
+            0 0 0 #991b1b;
+        }
 
         .action-button:focus-visible {
-          outline: 3px solid rgba(37, 99, 235, 0.35);
-          outline-offset: 3px;
+          outline:
+            3px solid
+            rgba(
+              37,
+              99,
+              235,
+              0.35
+            );
+
+          outline-offset:
+            3px;
         }
 
         .action-button:disabled {
@@ -882,7 +1303,8 @@ export default function PickSubmission() {
           background: #cbd5e1;
           color: #64748b;
           cursor: not-allowed;
-          box-shadow: 0 3px 0 #94a3b8;
+          box-shadow:
+            0 3px 0 #94a3b8;
           transform: none;
         }
       `}</style>
