@@ -137,11 +137,8 @@ export default function PickSubmission() {
       setLockPick(null)
 
       const {
-        data:
-          weekGames,
-
-        error:
-          gamesError,
+        data: weekGames,
+        error: gamesError,
       } = await supabase
         .from('games')
         .select('*')
@@ -152,8 +149,7 @@ export default function PickSubmission() {
         .order(
           'kickoff_time',
           {
-            ascending:
-              true,
+            ascending: true,
           }
         )
 
@@ -189,9 +185,7 @@ export default function PickSubmission() {
       ) {
         const {
           data,
-
-          error:
-            picksError,
+          error: picksError,
         } = await supabase
           .from('picks')
           .select(
@@ -228,8 +222,8 @@ export default function PickSubmission() {
           data || []
       }
 
-      // Keep the same small grace period
-      // used by the previous submit page.
+      // Small grace period consistent with
+      // the prior Submit Picks page.
       const GRACE_MS =
         60 * 1000
 
@@ -436,19 +430,21 @@ export default function PickSubmission() {
   // ================================================================
   // VALIDATION
   //
-  // IMPORTANT 2026 UPDATE:
-  //
   // Users may submit picks incrementally.
   //
   // Example:
-  // Thursday = submit 1
-  // Sunday   = submit 3
-  // Monday   = submit final 1
+  // Thursday = submit 1 pick
+  // Sunday   = submit more picks
+  // Monday   = submit final pick
   //
-  // Partial cards are allowed as long as they do not violate the
-  // maximum category limits.
+  // LOCK PICKS ARE OPTIONAL.
   //
-  // Once the card reaches 5 picks, ALL final weekly rules must be met.
+  // A user may have:
+  // 0 locks
+  // OR
+  // 1 lock
+  //
+  // Never more than 1.
   // ================================================================
 
   const validateCombinedPicks = (
@@ -470,7 +466,7 @@ export default function PickSubmission() {
       pendingCount
 
     // --------------------------------------------------------------
-    // Never allow more than five total picks.
+    // MAXIMUM FIVE PICKS
     // --------------------------------------------------------------
 
     if (
@@ -491,29 +487,36 @@ export default function PickSubmission() {
       )
 
     // --------------------------------------------------------------
-    // Category maximums apply EVEN on partial submissions.
+    // CATEGORY MAXIMUMS
     //
-    // This prevents a player from submitting a partial card that
-    // could never become a legal final card.
+    // These rules apply even while building a partial card.
     // --------------------------------------------------------------
 
     if (
       selectedWeek ===
       18
     ) {
-      if (be > 5) {
+      if (
+        be > 5
+      ) {
         return '🚫 Only 5 picks are allowed in Week 18.'
       }
     } else {
-      if (th > 1) {
+      if (
+        th > 1
+      ) {
         return '🚫 Only 1 Thursday pick is allowed.'
       }
 
-      if (mo > 1) {
+      if (
+        mo > 1
+      ) {
         return '🚫 Only 1 Monday pick is allowed.'
       }
 
-      if (be > 3) {
+      if (
+        be > 3
+      ) {
         return '🚫 Only 3 “Best Choice” picks are allowed.'
       }
     }
@@ -521,9 +524,11 @@ export default function PickSubmission() {
     // --------------------------------------------------------------
     // LOCK VALIDATION
     //
-    // A partial submission does NOT have to contain a lock.
+    // Lock picks are OPTIONAL.
     //
-    // But users may never have more than one lock stored/pending.
+    // 0 locks = valid
+    // 1 lock  = valid
+    // 2 locks = invalid
     // --------------------------------------------------------------
 
     const existingLockCount =
@@ -554,8 +559,7 @@ export default function PickSubmission() {
     // --------------------------------------------------------------
     // PARTIAL CARD
     //
-    // If the user has fewer than five total picks, this submission
-    // is allowed at this point.
+    // Users may submit 1, 2, 3, or 4 picks.
     // --------------------------------------------------------------
 
     if (
@@ -568,7 +572,8 @@ export default function PickSubmission() {
     // --------------------------------------------------------------
     // COMPLETE FIVE-PICK CARD
     //
-    // Once the card reaches five, enforce ALL final rules.
+    // Enforce the final pick-category rules.
+    // A lock is NOT required.
     // --------------------------------------------------------------
 
     if (
@@ -591,13 +596,6 @@ export default function PickSubmission() {
       )
     }
 
-    // A completed card MUST contain exactly one lock.
-    if (
-      totalLocks !== 1
-    ) {
-      return '🚫 Your completed five-pick card must contain exactly one lock pick.'
-    }
-
     return null
   }
 
@@ -615,8 +613,8 @@ export default function PickSubmission() {
       ...picks,
     }
 
-    // Clicking the same selected team
-    // again removes the selection.
+    // Clicking the same selected team again
+    // removes the pending selection.
     if (
       copy[gid] ===
       team
@@ -681,7 +679,7 @@ export default function PickSubmission() {
       )
 
     // --------------------------------------------------------------
-    // Prevent category overages while the user is selecting.
+    // PREVENT CATEGORY OVERAGES
     // --------------------------------------------------------------
 
     if (
@@ -740,6 +738,9 @@ export default function PickSubmission() {
 
   // ================================================================
   // SELECT LOCK
+  //
+  // Lock is optional.
+  // Maximum one per week.
   // ================================================================
 
   const handleLock =
@@ -893,7 +894,7 @@ export default function PickSubmission() {
         }
 
         // ------------------------------------------------------------
-        // MAXIMUM 5 PICKS
+        // MAXIMUM FIVE PICKS
         // ------------------------------------------------------------
 
         if (
@@ -966,7 +967,7 @@ export default function PickSubmission() {
         }
 
         // ------------------------------------------------------------
-        // INSERT
+        // INSERT PICKS
         // ------------------------------------------------------------
 
         const inserts =
@@ -1249,7 +1250,8 @@ export default function PickSubmission() {
 
       <div
         style={{
-          marginBottom: 16,
+          marginBottom:
+            16,
         }}
       >
         <label>
@@ -1273,12 +1275,14 @@ export default function PickSubmission() {
               !weekReady
             }
             style={{
-              width: 60,
+              width:
+                60,
             }}
           >
             {Array.from(
               {
-                length: 18,
+                length:
+                  18,
               },
               (
                 _,
@@ -1305,7 +1309,9 @@ export default function PickSubmission() {
         {weekReady && (
           <small
             style={{
-              marginLeft: 10,
+              marginLeft:
+                10,
+
               color:
                 '#64748b',
             }}
@@ -1387,10 +1393,10 @@ export default function PickSubmission() {
               >
                 You may submit your
                 picks one at a time
-                or in groups. Your
-                completed 5-pick
-                card must include
-                exactly one lock.
+                or in groups. Lock
+                picks are optional,
+                with a maximum of
+                one lock per week.
               </div>
             )}
           </div>
