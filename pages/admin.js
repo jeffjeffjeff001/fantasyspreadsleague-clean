@@ -18,12 +18,20 @@ function matchupKey(awayTeam, homeTeam) {
 }
 
 function isValidScore(value) {
-  if (value === '' || value === null || value === undefined) {
+  if (
+    value === '' ||
+    value === null ||
+    value === undefined
+  ) {
     return false
   }
 
   const number = Number(value)
-  return Number.isInteger(number) && number >= 0
+
+  return (
+    Number.isInteger(number) &&
+    number >= 0
+  )
 }
 
 function formatSpread(value) {
@@ -33,7 +41,9 @@ function formatSpread(value) {
     return '—'
   }
 
-  return number > 0 ? `+${number}` : String(number)
+  return number > 0
+    ? `+${number}`
+    : String(number)
 }
 
 function isoToLocalDateTimeInput(value) {
@@ -41,31 +51,50 @@ function isoToLocalDateTimeInput(value) {
 
   const date = new Date(value)
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return ''
   }
 
-  const pad = number => String(number).padStart(2, '0')
+  const pad = number =>
+    String(number)
+      .padStart(2, '0')
 
   return [
     date.getFullYear(),
     '-',
-    pad(date.getMonth() + 1),
+    pad(
+      date.getMonth() + 1
+    ),
     '-',
-    pad(date.getDate()),
+    pad(
+      date.getDate()
+    ),
     'T',
-    pad(date.getHours()),
+    pad(
+      date.getHours()
+    ),
     ':',
-    pad(date.getMinutes()),
+    pad(
+      date.getMinutes()
+    ),
   ].join('')
 }
 
 function localDateTimeInputToIso(value) {
   if (!value) return ''
 
-  const date = new Date(value)
+  const date =
+    new Date(value)
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return ''
   }
 
@@ -73,74 +102,197 @@ function localDateTimeInputToIso(value) {
 }
 
 export default function Admin() {
-  const ADMIN_PW = process.env.NEXT_PUBLIC_ADMIN_PASSWORD
+  const ADMIN_PW =
+    process.env
+      .NEXT_PUBLIC_ADMIN_PASSWORD
 
   // ================================================================
   // ADMIN / WEEK STATE
   // ================================================================
 
-  const [enteredPw, setEnteredPw] = useState('')
-  const [authorized, setAuthorized] = useState(false)
-  const [selectedWeek, setSelectedWeek] = useState(1)
-  const [weekReady, setWeekReady] = useState(false)
-  const [weekError, setWeekError] = useState('')
-  const [preseasonTestMode, setPreseasonTestMode] = useState(false)
-  const [regularWeekBeforeTest, setRegularWeekBeforeTest] = useState(1)
+  const [
+    enteredPw,
+    setEnteredPw,
+  ] = useState('')
+
+  const [
+    authorized,
+    setAuthorized,
+  ] = useState(false)
+
+  const [
+    selectedWeek,
+    setSelectedWeek,
+  ] = useState(1)
+
+  const [
+    weekReady,
+    setWeekReady,
+  ] = useState(false)
+
+  const [
+    weekError,
+    setWeekError,
+  ] = useState('')
+
+  const [
+    preseasonTestMode,
+    setPreseasonTestMode,
+  ] = useState(false)
+
+  const [
+    regularWeekBeforeTest,
+    setRegularWeekBeforeTest,
+  ] = useState(1)
 
   // ================================================================
   // PUBLISHED GAMES
   // ================================================================
 
-  const [games, setGames] = useState([])
-  const [loadingGames, setLoadingGames] = useState(false)
-  const [newGameAway, setNewGameAway] = useState('')
-  const [newGameHome, setNewGameHome] = useState('')
-  const [newGameSpread, setNewGameSpread] = useState('')
-  const [newGameKickoff, setNewGameKickoff] = useState('')
+  const [
+    games,
+    setGames,
+  ] = useState([])
+
+  const [
+    loadingGames,
+    setLoadingGames,
+  ] = useState(false)
+
+  const [
+    newGameAway,
+    setNewGameAway,
+  ] = useState('')
+
+  const [
+    newGameHome,
+    setNewGameHome,
+  ] = useState('')
+
+  const [
+    newGameSpread,
+    setNewGameSpread,
+  ] = useState('')
+
+  const [
+    newGameKickoff,
+    setNewGameKickoff,
+  ] = useState('')
 
   // ================================================================
   // SCHEDULE + DRAFTKINGS PREVIEW
   // ================================================================
 
-  const [schedulePreview, setSchedulePreview] = useState([])
-  const [scheduleLoading, setScheduleLoading] = useState(false)
-  const [schedulePublishing, setSchedulePublishing] = useState(false)
-  const [scheduleMessage, setScheduleMessage] = useState('')
-  const [scheduleError, setScheduleError] = useState('')
-  const [scheduleMeta, setScheduleMeta] = useState(null)
+  const [
+    schedulePreview,
+    setSchedulePreview,
+  ] = useState([])
+
+  const [
+    scheduleLoading,
+    setScheduleLoading,
+  ] = useState(false)
+
+  const [
+    schedulePublishing,
+    setSchedulePublishing,
+  ] = useState(false)
+
+  const [
+    scheduleMessage,
+    setScheduleMessage,
+  ] = useState('')
+
+  const [
+    scheduleError,
+    setScheduleError,
+  ] = useState('')
+
+  const [
+    scheduleMeta,
+    setScheduleMeta,
+  ] = useState(null)
 
   // ================================================================
   // RESULTS PREVIEW
   // ================================================================
 
-  const [resultsPreview, setResultsPreview] = useState([])
-  const [resultsLoading, setResultsLoading] = useState(false)
-  const [resultsPublishing, setResultsPublishing] = useState(false)
-  const [resultsMessage, setResultsMessage] = useState('')
-  const [resultsError, setResultsError] = useState('')
+  const [
+    resultsPreview,
+    setResultsPreview,
+  ] = useState([])
+
+  const [
+    resultsLoading,
+    setResultsLoading,
+  ] = useState(false)
+
+  const [
+    resultsPublishing,
+    setResultsPublishing,
+  ] = useState(false)
+
+  const [
+    resultsMessage,
+    setResultsMessage,
+  ] = useState('')
+
+  const [
+    resultsError,
+    setResultsError,
+  ] = useState('')
 
   // ================================================================
   // USER MANAGEMENT
   // ================================================================
 
-  const [profiles, setProfiles] = useState([])
-  const [loadingProfiles, setLoadingProfiles] = useState(false)
+  const [
+    profiles,
+    setProfiles,
+  ] = useState([])
+
+  const [
+    loadingProfiles,
+    setLoadingProfiles,
+  ] = useState(false)
 
   // ================================================================
   // VIEW USER PICKS
   // ================================================================
 
-  const [userForPicks, setUserForPicks] = useState('')
-  const [weekForPicks, setWeekForPicks] = useState(1)
-  const [userPicks, setUserPicks] = useState([])
-  const [loadingPicks, setLoadingPicks] = useState(false)
+  const [
+    userForPicks,
+    setUserForPicks,
+  ] = useState('')
+
+  const [
+    weekForPicks,
+    setWeekForPicks,
+  ] = useState(1)
+
+  const [
+    userPicks,
+    setUserPicks,
+  ] = useState([])
+
+  const [
+    loadingPicks,
+    setLoadingPicks,
+  ] = useState(false)
 
   // ================================================================
   // WEEKLY SCORES
   // ================================================================
 
-  const [weeklyScores, setWeeklyScores] = useState([])
-  const [loadingScores, setLoadingScores] = useState(false)
+  const [
+    weeklyScores,
+    setWeeklyScores,
+  ] = useState([])
+
+  const [
+    loadingScores,
+    setLoadingScores,
+  ] = useState(false)
 
   // ================================================================
   // CURRENT WEEK
@@ -151,12 +303,23 @@ export default function Admin() {
 
     async function initializeWeek() {
       try {
-        const currentWeek = await fetchCurrentWeek(supabase)
+        const currentWeek =
+          await fetchCurrentWeek(
+            supabase
+          )
 
         if (!cancelled) {
-          setSelectedWeek(currentWeek)
-          setWeekForPicks(currentWeek)
-          setRegularWeekBeforeTest(currentWeek)
+          setSelectedWeek(
+            currentWeek
+          )
+
+          setWeekForPicks(
+            currentWeek
+          )
+
+          setRegularWeekBeforeTest(
+            currentWeek
+          )
         }
       } catch (error) {
         console.error(
@@ -171,7 +334,9 @@ export default function Admin() {
         }
       } finally {
         if (!cancelled) {
-          setWeekReady(true)
+          setWeekReady(
+            true
+          )
         }
       }
     }
@@ -184,7 +349,12 @@ export default function Admin() {
   }, [])
 
   useEffect(() => {
-    if (!authorized || !weekReady) return
+    if (
+      !authorized ||
+      !weekReady
+    ) {
+      return
+    }
 
     loadGames()
   }, [
@@ -216,36 +386,58 @@ export default function Admin() {
   // ADMIN PASSWORD
   // ================================================================
 
-  const handlePwSubmit = event => {
-    event.preventDefault()
+  const handlePwSubmit =
+    event => {
+      event.preventDefault()
 
-    if (enteredPw === ADMIN_PW) {
-      setAuthorized(true)
-    } else {
-      alert('❌ Incorrect password')
-      setEnteredPw('')
+      if (
+        enteredPw ===
+        ADMIN_PW
+      ) {
+        setAuthorized(true)
+      } else {
+        alert(
+          '❌ Incorrect password'
+        )
+
+        setEnteredPw('')
+      }
     }
-  }
 
   if (!authorized) {
     return (
-      <div style={{ padding: 20 }}>
-        <h1>Admin Login</h1>
+      <div
+        style={{
+          padding: 20,
+        }}
+      >
+        <h1>
+          Admin Login
+        </h1>
 
-        <form onSubmit={handlePwSubmit}>
+        <form
+          onSubmit={
+            handlePwSubmit
+          }
+        >
           <label>
             Enter admin password:
 
             <input
               type="password"
-              value={enteredPw}
-              onChange={event =>
-                setEnteredPw(
-                  event.target.value
-                )
+              value={
+                enteredPw
+              }
+              onChange={
+                event =>
+                  setEnteredPw(
+                    event.target
+                      .value
+                  )
               }
               style={{
-                marginLeft: 8,
+                marginLeft:
+                  8,
               }}
             />
           </label>
@@ -253,7 +445,8 @@ export default function Admin() {
           <button
             type="submit"
             style={{
-              marginLeft: 12,
+              marginLeft:
+                12,
             }}
           >
             Unlock
@@ -267,7 +460,9 @@ export default function Admin() {
   // PRESEASON TEST MODE
   // ================================================================
 
-  function handlePreseasonTestMode(enabled) {
+  function handlePreseasonTestMode(
+    enabled
+  ) {
     setSchedulePreview([])
     setScheduleMeta(null)
     setScheduleMessage('')
@@ -284,7 +479,9 @@ export default function Admin() {
         selectedWeek
       )
 
-      setPreseasonTestMode(true)
+      setPreseasonTestMode(
+        true
+      )
 
       setSelectedWeek(
         PRESEASON_TEST_STORAGE_WEEK
@@ -297,14 +494,18 @@ export default function Admin() {
       return
     }
 
-    setPreseasonTestMode(false)
+    setPreseasonTestMode(
+      false
+    )
 
     setSelectedWeek(
-      regularWeekBeforeTest || 1
+      regularWeekBeforeTest ||
+        1
     )
 
     setWeekForPicks(
-      regularWeekBeforeTest || 1
+      regularWeekBeforeTest ||
+        1
     )
   }
 
@@ -313,22 +514,27 @@ export default function Admin() {
   // ================================================================
 
   async function loadGames() {
-    setLoadingGames(true)
+    setLoadingGames(
+      true
+    )
 
-    const { data, error } =
-      await supabase
-        .from('games')
-        .select('*')
-        .eq(
-          'week',
-          selectedWeek
-        )
-        .order(
-          'kickoff_time',
-          {
-            ascending: true,
-          }
-        )
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('games')
+      .select('*')
+      .eq(
+        'week',
+        selectedWeek
+      )
+      .order(
+        'kickoff_time',
+        {
+          ascending:
+            true,
+        }
+      )
 
     if (error) {
       alert(
@@ -338,10 +544,14 @@ export default function Admin() {
 
       setGames([])
     } else {
-      setGames(data || [])
+      setGames(
+        data || []
+      )
     }
 
-    setLoadingGames(false)
+    setLoadingGames(
+      false
+    )
   }
 
   // ================================================================
@@ -349,20 +559,25 @@ export default function Admin() {
   // ================================================================
 
   async function loadProfiles() {
-    setLoadingProfiles(true)
+    setLoadingProfiles(
+      true
+    )
 
-    const { data, error } =
-      await supabase
-        .from('profiles')
-        .select(
-          'email,username,first_name,last_name'
-        )
-        .order(
-          'username',
-          {
-            ascending: true,
-          }
-        )
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('profiles')
+      .select(
+        'email,username,first_name,last_name'
+      )
+      .order(
+        'username',
+        {
+          ascending:
+            true,
+        }
+      )
 
     if (error) {
       alert(
@@ -372,10 +587,14 @@ export default function Admin() {
 
       setProfiles([])
     } else {
-      setProfiles(data || [])
+      setProfiles(
+        data || []
+      )
     }
 
-    setLoadingProfiles(false)
+    setLoadingProfiles(
+      false
+    )
   }
 
   // ================================================================
@@ -390,29 +609,31 @@ export default function Admin() {
       await fetch(
         '/api/admin/nfl-data',
         {
-          method: 'POST',
+          method:
+            'POST',
 
           headers: {
             'Content-Type':
               'application/json',
           },
 
-          body: JSON.stringify({
-            action,
+          body:
+            JSON.stringify({
+              action,
 
-            week:
-              selectedWeek,
+              week:
+                selectedWeek,
 
-            mode:
-              preseasonTestMode
-                ? 'preseason'
-                : 'regular',
+              mode:
+                preseasonTestMode
+                  ? 'preseason'
+                  : 'regular',
 
-            adminPassword:
-              enteredPw,
+              adminPassword:
+                enteredPw,
 
-            ...extra,
-          }),
+              ...extra,
+            }),
         }
       )
 
@@ -440,7 +661,9 @@ export default function Admin() {
   // ================================================================
 
   async function loadSchedulePreview() {
-    setScheduleLoading(true)
+    setScheduleLoading(
+      true
+    )
 
     setScheduleMessage('')
     setScheduleError('')
@@ -454,7 +677,10 @@ export default function Admin() {
         )
 
       const rows =
-        (payload.games || []).map(
+        (
+          payload.games ||
+          []
+        ).map(
           game => ({
             ...game,
 
@@ -499,7 +725,8 @@ export default function Admin() {
       })
 
       if (
-        rows.length === 0
+        rows.length ===
+        0
       ) {
         setScheduleError(
           preseasonTestMode
@@ -509,7 +736,7 @@ export default function Admin() {
       } else {
         setScheduleMessage(
           preseasonTestMode
-            ? `Loaded ${rows.length} preseason games for the Aug. 20–23 test slate. Nothing has been published yet.`
+            ? `Loaded ${rows.length} preseason games for the test slate. Nothing has been published yet.`
             : `Loaded ${rows.length} Week ${selectedWeek} games for review. Nothing has been published yet.`
         )
       }
@@ -546,7 +773,8 @@ export default function Admin() {
             row,
             rowIndex
           ) =>
-            rowIndex === index
+            rowIndex ===
+            index
               ? {
                   ...row,
 
@@ -565,13 +793,15 @@ export default function Admin() {
     row
   ) {
     if (
-      !row.away_team?.trim()
+      !row.away_team
+        ?.trim()
     ) {
       return 'Missing away team'
     }
 
     if (
-      !row.home_team?.trim()
+      !row.home_team
+        ?.trim()
     ) {
       return 'Missing home team'
     }
@@ -662,7 +892,9 @@ export default function Admin() {
         `Publish ${publishLabel} with the DraftKings lines shown in this preview?\n\nOnce published, these games become visible on Submit Picks.`
       )
 
-    if (!confirmed) return
+    if (!confirmed) {
+      return
+    }
 
     setSchedulePublishing(
       true
@@ -749,7 +981,9 @@ export default function Admin() {
           insertError,
       } = await supabase
         .from('games')
-        .insert(rows)
+        .insert(
+          rows
+        )
 
       if (
         insertError
@@ -787,11 +1021,10 @@ export default function Admin() {
   // ================================================================
   // LOAD RESULTS
   //
-  // IMPORTANT:
   // Fresh API results are merged with anything already approved
   // and stored in Supabase.
   //
-  // This allows:
+  // Example:
   //
   // Friday:
   // Approve Thursday result → Calculate
@@ -799,7 +1032,7 @@ export default function Admin() {
   // Tuesday:
   // Approve remaining results → Calculate again
   //
-  // Thursday's result stays stored and keeps counting.
+  // Thursday's approved result remains stored and continues counting.
   // ================================================================
 
   async function loadResultsPreview() {
@@ -813,7 +1046,7 @@ export default function Admin() {
 
     try {
       // ------------------------------------------------------------
-      // Official games currently published for this week.
+      // Published games for selected week.
       // ------------------------------------------------------------
 
       const {
@@ -858,10 +1091,7 @@ export default function Admin() {
       }
 
       // ------------------------------------------------------------
-      // Results already approved in Supabase.
-      //
-      // These remain official even if the external API no longer
-      // returns that game later.
+      // Already-approved results.
       // ------------------------------------------------------------
 
       const {
@@ -925,7 +1155,7 @@ export default function Admin() {
         )
 
       // ------------------------------------------------------------
-      // Ask our NFL-data API for newest available scores.
+      // Pull newest available scores.
       // ------------------------------------------------------------
 
       const eventIds =
@@ -980,10 +1210,6 @@ export default function Admin() {
 
       const matchedGameIds =
         new Set()
-
-      // ------------------------------------------------------------
-      // Merge fresh API data with approved Supabase data.
-      // ------------------------------------------------------------
 
       const rows =
         (
@@ -1052,7 +1278,6 @@ export default function Admin() {
                   ?.home_team ||
                 result.home_team,
 
-              // Already-approved score stored in Supabase wins.
               away_score:
                 alreadyApproved
                   ? approvedResult
@@ -1110,9 +1335,9 @@ export default function Admin() {
         )
 
       // ------------------------------------------------------------
-      // Include published games that today's API did not return.
+      // Games not returned by today's API.
       //
-      // If it was approved previously, show the stored score.
+      // If already approved, show the stored score.
       // ------------------------------------------------------------
 
       publishedGames.forEach(
@@ -1234,7 +1459,8 @@ export default function Admin() {
         } results loaded. ` +
           `${approvedCount} already approved • ` +
           `${newFinalCount} new final${
-            newFinalCount === 1
+            newFinalCount ===
+            1
               ? ''
               : 's'
           } ready • ` +
@@ -1273,15 +1499,14 @@ export default function Admin() {
             row,
             rowIndex
           ) =>
-            rowIndex === index
+            rowIndex ===
+            index
               ? {
                   ...row,
 
                   [field]:
                     value,
 
-                  // If an approved score is manually edited,
-                  // commissioner must approve it again.
                   already_approved:
                     false,
 
@@ -1322,8 +1547,6 @@ export default function Admin() {
       return 'Final score not available'
     }
 
-    // An approved score stays valid even if the external
-    // score source no longer returns that game.
     if (
       row.already_approved
     ) {
@@ -1343,8 +1566,6 @@ export default function Admin() {
 
   // ================================================================
   // APPROVE NEW RESULTS
-  //
-  // Works incrementally for BOTH preseason and regular season.
   // ================================================================
 
   async function publishResults() {
@@ -1362,9 +1583,6 @@ export default function Admin() {
       return
     }
 
-    // Only save results that:
-    // 1. are not already approved, and
-    // 2. currently have a valid final score.
     const newReadyRows =
       resultsPreview.filter(
         row =>
@@ -1399,7 +1617,9 @@ export default function Admin() {
         }?\n\nPreviously approved results will remain unchanged.`
       )
 
-    if (!confirmed) return
+    if (!confirmed) {
+      return
+    }
 
     setResultsPublishing(
       true
@@ -1489,7 +1709,8 @@ export default function Admin() {
 
       setResultsMessage(
         `✅ ${rows.length} new final result${
-          rows.length === 1
+          rows.length ===
+          1
             ? ''
             : 's'
         } approved. Previously approved results remain stored. You can Calculate Scores now or reload later as more games finish.`
@@ -2001,6 +2222,16 @@ export default function Admin() {
 
   // ================================================================
   // CALCULATE WEEKLY SCORES
+  //
+  // IMPORTANT:
+  //
+  // Perfect Week bonus requires:
+  //
+  // 1. Exactly 5 picks submitted
+  // 2. All 5 picks have approved results
+  // 3. All 5 picks are correct
+  //
+  // This prevents partial results from incorrectly awarding +3.
   // ================================================================
 
   async function calculateScores() {
@@ -2027,9 +2258,13 @@ export default function Admin() {
         throw profileError
       }
 
-      // IMPORTANT:
-      // This loads ALL approved results already stored for the week,
-      // not only the games returned by the latest API call.
+      // ------------------------------------------------------------
+      // Load ALL approved results stored for this week.
+      //
+      // Previously approved Thursday/Sunday results remain included
+      // when scores are recalculated later.
+      // ------------------------------------------------------------
+
       const {
         data:
           results,
@@ -2057,7 +2292,16 @@ export default function Admin() {
           (
             value ??
             ''
-          ).trim()
+          )
+            .trim()
+            .toLowerCase()
+
+      // ------------------------------------------------------------
+      // Count ALL picks submitted by each user for this week.
+      //
+      // This is intentionally independent from whether a result
+      // exists yet.
+      // ------------------------------------------------------------
 
       const {
         data:
@@ -2100,6 +2344,10 @@ export default function Admin() {
           ) + 1
       }
 
+      // ------------------------------------------------------------
+      // Load this week's picks and game information.
+      // ------------------------------------------------------------
+
       const {
         data:
           picks,
@@ -2130,7 +2378,8 @@ export default function Admin() {
         throw picksError
       }
 
-      const stats = {}
+      const stats =
+        {}
 
       ;(
         profileRows ||
@@ -2149,6 +2398,11 @@ export default function Admin() {
             correct:
               0,
 
+            // Number of submitted picks that now
+            // have an approved result.
+            gradedPicks:
+              0,
+
             lockCorrect:
               0,
 
@@ -2158,6 +2412,7 @@ export default function Admin() {
             perfectBonus:
               0,
 
+            // ALL picks submitted for the week.
             weeklyTotal:
               weeklyTotalByUser[
                 profile.email
@@ -2167,6 +2422,10 @@ export default function Admin() {
         }
       )
 
+      // ------------------------------------------------------------
+      // SCORE EACH PICK
+      // ------------------------------------------------------------
+
       for (
         const pick of
           picks ||
@@ -2175,14 +2434,18 @@ export default function Admin() {
         const game =
           pick.games
 
-        if (!game) continue
+        if (!game) {
+          continue
+        }
 
         const user =
           stats[
             pick.user_email
           ]
 
-        if (!user) continue
+        if (!user) {
+          continue
+        }
 
         const result =
           (
@@ -2190,8 +2453,12 @@ export default function Admin() {
             []
           ).find(
             row =>
-              row.week ===
-                game.week &&
+              Number(
+                row.week
+              ) ===
+                Number(
+                  game.week
+                ) &&
 
               normalize(
                 row.home_team
@@ -2208,8 +2475,17 @@ export default function Admin() {
                 )
           )
 
-        // Game has not been approved yet.
-        if (!result) continue
+        // ----------------------------------------------------------
+        // No approved result = this pick has NOT been graded.
+        // ----------------------------------------------------------
+
+        if (!result) {
+          continue
+        }
+
+        // We have an approved result for this pick.
+        user.gradedPicks +=
+          1
 
         const spread =
           Number(
@@ -2227,9 +2503,15 @@ export default function Admin() {
             result.away_score
           )
 
-        // Preserve existing FSL push behavior:
-        // push is not correct for either side.
-        // A lock push gets the existing -2 treatment.
+        // ----------------------------------------------------------
+        // PUSH
+        //
+        // Preserve existing FSL behavior:
+        //
+        // Normal push = not correct, 0 points
+        // Lock push   = existing -2 treatment
+        // ----------------------------------------------------------
+
         if (
           adjustedHomeScore ===
           awayScore
@@ -2265,8 +2547,13 @@ export default function Admin() {
             pick.selected_team
           )
 
+        // ----------------------------------------------------------
+        // CORRECT PICK
+        // ----------------------------------------------------------
+
         if (
-          picked === winner
+          picked ===
+          winner
         ) {
           user.correct +=
             1
@@ -2274,6 +2561,8 @@ export default function Admin() {
           user.weeklyPoints +=
             1
 
+          // Optional Lock:
+          // correct lock = +2 additional.
           if (
             pick.is_lock
           ) {
@@ -2283,6 +2572,11 @@ export default function Admin() {
             user.weeklyPoints +=
               2
           }
+
+        // ----------------------------------------------------------
+        // INCORRECT LOCK
+        // ----------------------------------------------------------
+
         } else if (
           pick.is_lock
         ) {
@@ -2294,8 +2588,19 @@ export default function Admin() {
         }
       }
 
-      // Perfect bonus applies only when all of that user's
-      // stored weekly picks have been graded as correct.
+      // ------------------------------------------------------------
+      // PERFECT WEEK BONUS
+      //
+      // ALL THREE CONDITIONS MUST BE TRUE:
+      //
+      // 1. Exactly 5 picks were submitted
+      // 2. Exactly 5 picks were graded
+      // 3. Exactly 5 picks were correct
+      //
+      // This prevents Thursday/Sunday partial results from
+      // incorrectly triggering the +3 bonus.
+      // ------------------------------------------------------------
+
       for (
         const user of
           Object.values(
@@ -2303,10 +2608,12 @@ export default function Admin() {
           )
       ) {
         if (
-          user.weeklyTotal >
-            0 &&
+          user.weeklyTotal ===
+            5 &&
+          user.gradedPicks ===
+            5 &&
           user.correct ===
-            user.weeklyTotal
+            5
         ) {
           user.perfectBonus =
             3
@@ -2478,7 +2785,7 @@ export default function Admin() {
             className="test-mode-copy"
           >
             {preseasonTestMode
-              ? 'ACTIVE: Loads the Aug. 20–23 NFL preseason slate from The Odds API, uses DraftKings spreads, and publishes the test games as Week 18. Week 18 allows any five picks. Clear TEST Week 18 when testing is finished.'
+              ? 'ACTIVE: Loads the NFL preseason test slate from The Odds API, uses DraftKings spreads, and publishes the test games as Week 18. Week 18 allows any five picks. Clear TEST Week 18 when testing is finished.'
               : 'Off: normal 2026 regular-season schedule and result workflow.'}
           </p>
         </div>
@@ -2510,7 +2817,8 @@ export default function Admin() {
             >
               {Array.from(
                 {
-                  length: 18,
+                  length:
+                    18,
                 },
                 (
                   _,
@@ -2592,7 +2900,8 @@ export default function Admin() {
               </strong>{' '}
 
               {
-                scheduleMeta.bookmaker
+                scheduleMeta
+                  .bookmaker
               }
 
               {preseasonTestMode
@@ -3074,8 +3383,7 @@ export default function Admin() {
                                 <span
                                   className="status-manual"
                                 >
-                                  ✓ New Final
-                                  (manual)
+                                  ✓ New Final (manual)
                                 </span>
                               ) : (
                                 <span
@@ -3127,7 +3435,8 @@ export default function Admin() {
 
       <section
         style={{
-          marginTop: 40,
+          marginTop:
+            40,
         }}
       >
         <h2>
@@ -3154,7 +3463,8 @@ export default function Admin() {
 
         <div
           style={{
-            marginBottom: 12,
+            marginBottom:
+              12,
           }}
         >
           <button
@@ -3173,7 +3483,9 @@ export default function Admin() {
 
           <small
             style={{
-              marginLeft: 10,
+              marginLeft:
+                10,
+
               color:
                 '#64748b',
             }}
@@ -3288,7 +3600,9 @@ export default function Admin() {
                   0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={
+                        6
+                      }
                       className="center"
                     >
                       No published games found for Week{' '}
@@ -3387,7 +3701,8 @@ export default function Admin() {
 
       <section
         style={{
-          marginTop: 40,
+          marginTop:
+            40,
         }}
       >
         <h2>
@@ -3483,7 +3798,8 @@ export default function Admin() {
 
       <section
         style={{
-          marginTop: 40,
+          marginTop:
+            40,
         }}
       >
         <h2>
@@ -3492,7 +3808,8 @@ export default function Admin() {
 
         <div
           style={{
-            marginBottom: 12,
+            marginBottom:
+              12,
           }}
         >
           <select
@@ -3549,13 +3866,17 @@ export default function Admin() {
               !weekReady
             }
             style={{
-              width: 60,
-              marginLeft: 8,
+              width:
+                60,
+
+              marginLeft:
+                8,
             }}
           >
             {Array.from(
               {
-                length: 18,
+                length:
+                  18,
               },
               (
                 _,
@@ -3587,7 +3908,8 @@ export default function Admin() {
               !weekReady
             }
             style={{
-              marginLeft: 8,
+              marginLeft:
+                8,
             }}
           >
             {loadingPicks
@@ -3692,7 +4014,9 @@ export default function Admin() {
                   0 && (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={
+                        4
+                      }
                       className="center"
                     >
                       No picks found.
@@ -3711,7 +4035,8 @@ export default function Admin() {
 
       <section
         style={{
-          marginTop: 40,
+          marginTop:
+            40,
         }}
       >
         <h2>
@@ -3727,7 +4052,9 @@ export default function Admin() {
           You may calculate after any approved final results.
           Each calculation starts fresh from all results currently
           stored for this week, so recalculating later will not
-          double-count earlier games.
+          double-count earlier games. A Perfect Week bonus is only
+          awarded after all five submitted picks have been graded
+          and all five are correct.
         </p>
 
         <button
@@ -3765,6 +4092,10 @@ export default function Admin() {
 
                   <th>
                     Correct
+                  </th>
+
+                  <th>
+                    Graded
                   </th>
 
                   <th>
@@ -3808,6 +4139,18 @@ export default function Admin() {
                       >
                         {
                           user.correct
+                        }
+                      </td>
+
+                      <td
+                        className="center"
+                      >
+                        {
+                          user.gradedPicks
+                        }
+                        /
+                        {
+                          user.weeklyTotal
                         }
                       </td>
 
@@ -3885,12 +4228,13 @@ export default function Admin() {
           padding: 14px 16px;
           border: 1px solid #eab308;
           border-radius: 8px;
-          background: rgba(
-            234,
-            179,
-            8,
-            0.08
-          );
+          background:
+            rgba(
+              234,
+              179,
+              8,
+              0.08
+            );
         }
 
         .test-mode-label {
@@ -4034,6 +4378,7 @@ export default function Admin() {
           border-radius: 8px;
           font-weight: 700;
           cursor: pointer;
+
           transition:
             transform 80ms ease,
             box-shadow 80ms ease,
