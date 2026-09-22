@@ -912,11 +912,11 @@ export default function Dashboard() {
                   </th>
 
                   <th>
-                    Total Correct
+                    Total Points
                   </th>
 
                   <th>
-                    Total Points
+                    Total Correct
                   </th>
 
                   <th>
@@ -969,7 +969,7 @@ export default function Dashboard() {
                         }}
                       >
                         {
-                          user.totalCorrect
+                          user.totalPoints
                         }
                       </td>
 
@@ -980,7 +980,7 @@ export default function Dashboard() {
                         }}
                       >
                         {
-                          user.totalPoints
+                          user.totalCorrect
                         }
                       </td>
 
