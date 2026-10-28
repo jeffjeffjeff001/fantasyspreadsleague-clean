@@ -2504,30 +2504,9 @@ export default function Admin() {
           )
 
         // ----------------------------------------------------------
-        // PUSH
-        //
-        // Preserve existing FSL behavior:
-        //
-        // Normal push = not correct, 0 points
-        // Lock push   = existing -2 treatment
+        // PUSH: either team earns the same credit as a correct pick.
+        // This also counts toward the fully graded perfect-week bonus.
         // ----------------------------------------------------------
-
-        if (
-          adjustedHomeScore ===
-          awayScore
-        ) {
-          if (
-            pick.is_lock
-          ) {
-            user.lockIncorrect +=
-              1
-
-            user.weeklyPoints -=
-              2
-          }
-
-          continue
-        }
 
         const homeCover =
           adjustedHomeScore >
@@ -2551,9 +2530,13 @@ export default function Admin() {
         // CORRECT PICK
         // ----------------------------------------------------------
 
+        const isPush = adjustedHomeScore === awayScore
+        const pickedGameTeam =
+          picked === normalize(result.home_team) ||
+          picked === normalize(result.away_team)
+
         if (
-          picked ===
-          winner
+          pickedGameTeam && (isPush || picked === winner)
         ) {
           user.correct +=
             1
